@@ -9,7 +9,7 @@ from google.genai import types
 
 st.set_page_config(
     page_title="Transkrip Nilai Reader",
-    page_icon="logo_transkrip.ico",  
+    page_icon="logo_transkrip.png",  
     layout="wide"
 )
 
