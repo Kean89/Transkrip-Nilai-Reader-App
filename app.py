@@ -9,9 +9,8 @@ from google.genai import types
 
 st.set_page_config(
     page_title="Transkrip Nilai Reader",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    page_icon="logo_transkrip.png",  
+    layout="wide"
 )
 
 st.markdown(
