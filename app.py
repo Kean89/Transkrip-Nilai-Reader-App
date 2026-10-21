@@ -73,7 +73,7 @@ with st.sidebar:
     st.markdown("---")
 
     api_key = st.text_input(
-        "🔑 Google Gemini API Key:",
+        "🔑 Google API Key:",
         type="password",
         help="Masukkan API Key dari Google AI Studio",
     )
@@ -81,7 +81,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📌 Petunjuk Penggunaan")
     st.markdown("""
-    1. Masukkan **API Key** Gemini Anda.
+    1. Masukkan **API Key**  Anda.
     2. Unggah transkrip nilai (**PDF**, **PNG**, **JPG**, **JPEG**).
     3. Klik tombol **Analisis Transkrip**.
     4. Unduh hasil ekstraksi ke **CSV**.
