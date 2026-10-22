@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import pandas as pd
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -41,7 +42,6 @@ st.markdown(
         border: 1px solid #374151;
         text-align: center;
     }
-    /* Style Box Pengumuman Biru */
     .announcement-box {
         background-color: #e0f2fe;
         color: #0369a1;
@@ -51,7 +51,6 @@ st.markdown(
         font-weight: 500;
         margin-bottom: 15px;
     }
-    /* Style Box Pengumuman Hijau (Sukses/Yudisium) */
     .success-box {
         background-color: #dcfce7;
         color: #15803d;
@@ -61,7 +60,6 @@ st.markdown(
         font-weight: bold;
         margin-bottom: 15px;
     }
-    /* Style Box Info Kuning (Jadwal Sarasehan / Petunjuk KP) */
     .warning-box {
         background-color: #fef9c3;
         color: #854d0e;
@@ -87,7 +85,6 @@ st.markdown(
         color: #ef4444;
         font-weight: bold;
     }
-    /* Tombol Custom Submit */
     .btn-custom-submit button {
         background: #00838f !important;
         color: white !important;
@@ -98,7 +95,6 @@ st.markdown(
     .btn-custom-submit button:hover {
         background: #006064 !important;
     }
-    /* Tombol Hijau Khas Form KP */
     .btn-kp-green button {
         background: #2e7d32 !important;
         color: white !important;
@@ -136,12 +132,206 @@ class TranskripNilai(BaseModel):
     mata_kuliah: list[MataKuliah]
 
 
+def init_db():
+    conn = sqlite3.connect("transkrip_nilai.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mahasiswa_profil (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama TEXT, nim TEXT, jurusan TEXT, universitas TEXT, ipk TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mata_kuliah (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, mahasiswa_id INTEGER,
+            kode_mk TEXT, nama_mk TEXT, sks TEXT, nilai TEXT,
+            FOREIGN KEY (mahasiswa_id) REFERENCES mahasiswa_profil(id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pendaftaran_ttu (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nim TEXT, nama TEXT, prodi TEXT, peminatan TEXT,
+            ttu_ambil TEXT, status TEXT, judul TEXT,
+            pembimbing1 TEXT, pembimbing2 TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pendaftaran_review (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nim TEXT, nama TEXT, prodi TEXT, peminatan TEXT,
+            judul TEXT, pembimbing1 TEXT, pembimbing2 TEXT,
+            reviewer1 TEXT, reviewer2 TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pendaftaran_yudisium (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pendaftaran_sarasehan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            status_pendaftaran TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS permohonan_surat_kp (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instansi TEXT, alamat TEXT, ditujukan TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pendaftaran_kp (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nim TEXT, nama TEXT, matakuliah_kp TEXT, tempat_kp TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+
+def simpan_ke_database(mhs_data, mk_list):
+    try:
+        conn = sqlite3.connect("transkrip_nilai.db")
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO mahasiswa_profil (nama, nim, jurusan, universitas, ipk) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            mhs_data.get("nama", "-"),
+            mhs_data.get("nim", "-"),
+            mhs_data.get("jurusan", "-"),
+            mhs_data.get("universitas", "-"),
+            str(mhs_data.get("ipk", "-"))
+        ))
+        mhs_id = cursor.lastrowid
+        
+        for mk in mk_list:
+            cursor.execute("""
+                INSERT INTO mata_kuliah (mahasiswa_id, kode_mk, nama_mk, sks, nilai) 
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                mhs_id,
+                mk.get("kode", "-"),
+                mk.get("nama_mk", "-"),
+                str(mk.get("sks", "-")),
+                str(mk.get("nilai", "-"))
+            ))
+            
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan ke database: {e}")
+        return False
+
+
+def simpan_ttu(nim, nama, prodi, peminatan, ttu_list, status, judul, pemb1, pemb2):
+    try:
+        conn = sqlite3.connect("transkrip_nilai.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO pendaftaran_ttu (nim, nama, prodi, peminatan, ttu_ambil, status, judul, pembimbing1, pembimbing2)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (nim, nama, prodi, peminatan, ", ".join(ttu_list), status, judul, pemb1, pemb2))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan data TTU: {e}")
+        return False
+
+
+def simpan_review(nim, nama, prodi, peminatan, judul, pemb1, pemb2, rev1, rev2):
+    try:
+        conn = sqlite3.connect("transkrip_nilai.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO pendaftaran_review (nim, nama, prodi, peminatan, judul, pembimbing1, pembimbing2, reviewer1, reviewer2)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (nim, nama, prodi, peminatan, judul, pemb1, pemb2, rev1, rev2))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan data Review: {e}")
+        return False
+
+
+def simpan_yudisium():
+    try:
+        conn = sqlite3.connect("transkrip_nilai.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pendaftaran_yudisium DEFAULT VALUES")
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan data Yudisium: {e}")
+        return False
+
+
+def simpan_sarasehan(status):
+    try:
+        conn = sqlite3.connect("transkrip_nilai.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pendaftaran_sarasehan (status_pendaftaran) VALUES (?)", (status,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan data Sarasehan: {e}")
+        return False
+
+
+def simpan_surat_kp(instansi, alamat, ditujukan):
+    try:
+        conn = sqlite3.connect("transkrip_nilai.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO permohonan_surat_kp (instansi, alamat, ditujukan)
+            VALUES (?, ?, ?)
+        """, (instansi, alamat, ditujukan))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan surat KP: {e}")
+        return False
+
+
+def simpan_kp(nim, nama, mk_list, tempat):
+    try:
+        conn = sqlite3.connect("transkrip_nilai.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO pendaftaran_kp (nim, nama, matakuliah_kp, tempat_kp)
+            VALUES (?, ?, ?, ?)
+        """, (nim, nama, ", ".join(mk_list), tempat))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan pendaftaran KP: {e}")
+        return False
+
 
 if "active_view" not in st.session_state:
     st.session_state["active_view"] = "HOME"
 if "sarasehan_registered" not in st.session_state:
     st.session_state["sarasehan_registered"] = False
-
 
 
 with st.sidebar:
@@ -167,7 +357,6 @@ with st.sidebar:
     st.caption("Dibuat dengan ❤️ menggunakan Streamlit")
 
 
-
 btn_col1, btn_col2, btn_col3, _ = st.columns([1.2, 1.8, 2.2, 4])
 
 with btn_col1:
@@ -186,7 +375,6 @@ with btn_col3:
         st.rerun()
 
 st.markdown("---")
-
 
 
 if st.session_state["active_view"] == "HOME":
@@ -279,6 +467,11 @@ if st.session_state["active_view"] == "HOME":
 
                             st.session_state["parsed_data"] = parsed_json
                             st.session_state["success_processed"] = True
+                            
+                            mhs_info = parsed_json.get("mahasiswa", {})
+                            mk_data = parsed_json.get("mata_kuliah", [])
+                            if simpan_ke_database(mhs_info, mk_data):
+                                st.success("💾 Data berhasil disimpan ke database lokal!")
 
                         except Exception as e:
                             st.error(f"❌ Terjadi kesalahan saat memproses dokumen: {e}")
@@ -319,12 +512,10 @@ if st.session_state["active_view"] == "HOME":
                         st.warning("⚠️ Tidak ada daftar mata kuliah yang terdeteksi.")
 
 
-
 elif st.session_state["active_view"] == "TTU":
     
     tab1, tab2, tab3 = st.tabs(["📋 Daftar TTU", "🔍 Daftar Review", "🎓 Daftar Yudisium"])
 
-   
     with tab1:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## PENDAFTARAN TUGAS TALENTA UNGGUL")
@@ -343,21 +534,18 @@ elif st.session_state["active_view"] == "TTU":
         with st.container():
             st.write("") 
             
-            
             col_nim, col_nama = st.columns(2)
             with col_nim:
                 nim = st.text_input("NIM", value="672014011")
             with col_nama:
                 nama = st.text_input("Nama", value="RAYNALDO")
 
-            
             col_prodi, col_peminatan = st.columns(2)
             with col_prodi:
                 prodi = st.text_input("Program Studi", value="S1 TEKNIK INFORMATIKA")
             with col_peminatan:
                 peminatan = st.text_input("Peminatan", placeholder="peminatan/bidang dari topik anda...")
 
-          
             col_ttu_ambil, col_status = st.columns(2)
             with col_ttu_ambil:
                 st.markdown("**Tugas Talenta Unggul Yang Akan Diambil** <span class='badge-req'>⚠️</span>", unsafe_allow_html=True)
@@ -369,11 +557,9 @@ elif st.session_state["active_view"] == "TTU":
                 st.markdown("**Status Tugas Talenta Unggul**", unsafe_allow_html=True)
                 status_ttu = st.selectbox("Status", ["Baru", "Lanjut"], label_visibility="collapsed")
 
-            
             st.markdown("**Judul Tugas Talenta Unggul** <span class='badge-req'>⚠️</span>", unsafe_allow_html=True)
             judul_ttu = st.text_input("Judul", placeholder="isi judul tugas talenta unggul anda. jika belum ada, isi -", label_visibility="collapsed")
 
-          
             col_pemb1, col_pemb2 = st.columns(2)
             with col_pemb1:
                 st.markdown("**Usulan Pembimbing 1**", unsafe_allow_html=True)
@@ -382,7 +568,6 @@ elif st.session_state["active_view"] == "TTU":
                 st.markdown("**Usulan Pembimbing 2**", unsafe_allow_html=True)
                 pemb2 = st.text_input("Pembimbing 2", placeholder="isi usulan pembimbing anda...", label_visibility="collapsed")
 
-            
             col_doc, col_transkrip = st.columns(2)
             with col_doc:
                 st.markdown("📄 **Dokumen Tugas Talenta Unggul (PDF/Ms.Word)** <span class='badge-req'>⚠️ Max 15MB</span>", unsafe_allow_html=True)
@@ -394,7 +579,6 @@ elif st.session_state["active_view"] == "TTU":
 
             st.markdown("---")
 
-           
             col_btn, _ = st.columns([1, 3])
             with col_btn:
                 btn_daftar = st.button("DAFTAR", key="btn_submit_ttu")
@@ -403,9 +587,14 @@ elif st.session_state["active_view"] == "TTU":
                 if not judul_ttu or judul_ttu == "-":
                     st.warning("⚠️ Mohon isi Judul Tugas Talenta Unggul terlebih dahulu!")
                 else:
-                    st.success("✅ Pendaftaran Tugas Talenta Unggul Berhasil Dikirim!")
+                    selected_ttu = []
+                    if ttu1: selected_ttu.append("Tugas Talenta Unggul 1")
+                    if ttu2: selected_ttu.append("Tugas Talenta Unggul 2")
+                    if ttu3: selected_ttu.append("Tugas Talenta Unggul 3")
+                    
+                    if simpan_ttu(nim, nama, prodi, peminatan, selected_ttu, status_ttu, judul_ttu, pemb1, pemb2):
+                        st.success("✅ Pendaftaran Tugas Talenta Unggul Berhasil Dikirim dan Disimpan ke Database!")
 
-    
     with tab2:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## PENDAFTARAN REVIEW")
@@ -424,21 +613,18 @@ elif st.session_state["active_view"] == "TTU":
         with st.container():
             st.write("")
 
-            
             col_r_nim, col_r_nama = st.columns(2)
             with col_r_nim:
                 r_nim = st.text_input("NIM", value="672014011", key="r_nim")
             with col_r_nama:
                 r_nama = st.text_input("Nama", value="RAYNALDO", key="r_nama")
 
-           
             col_r_prodi, col_r_peminatan = st.columns(2)
             with col_r_prodi:
                 r_prodi = st.text_input("Program Studi", value="S1 TEKNIK INFORMATIKA", key="r_prodi")
             with col_r_peminatan:
                 r_peminatan = st.text_input("Peminatan", value="web, webservice, php", key="r_peminatan")
 
-            
             st.markdown("**Judul Tugas Akhir**", unsafe_allow_html=True)
             r_judul = st.text_input(
                 "Judul Tugas Akhir",
@@ -447,7 +633,6 @@ elif st.session_state["active_view"] == "TTU":
                 key="r_judul"
             )
 
-            
             col_r_pemb1, col_r_pemb2 = st.columns(2)
             with col_r_pemb1:
                 st.markdown("**Pembimbing 1**", unsafe_allow_html=True)
@@ -456,7 +641,6 @@ elif st.session_state["active_view"] == "TTU":
                 st.markdown("**Pembimbing 2**", unsafe_allow_html=True)
                 r_pemb2 = st.text_input("Pembimbing 2", value="Belum Ada Data", label_visibility="collapsed", key="r_pemb2")
 
-           
             col_r_rev1, col_r_rev2 = st.columns(2)
             with col_r_rev1:
                 st.markdown("**Reviewer 1**", unsafe_allow_html=True)
@@ -465,7 +649,6 @@ elif st.session_state["active_view"] == "TTU":
                 st.markdown("**Reviewer 2**", unsafe_allow_html=True)
                 r_rev2 = st.text_input("Reviewer 2", value="Belum Ada Data", label_visibility="collapsed", key="r_rev2")
 
-            # Baris 6: Upload Dokumen Akhir & Scan Transkrip Nilai
             col_r_doc, col_r_transkrip = st.columns(2)
             with col_r_doc:
                 st.markdown("📄 **Dokumen Akhir (PDF/Ms.Word)** <span class='badge-req'>⚠️ *Ukuran file max 15MB</span>", unsafe_allow_html=True)
@@ -477,7 +660,6 @@ elif st.session_state["active_view"] == "TTU":
 
             st.markdown("---")
 
-            
             col_r_btn, _ = st.columns([1.5, 3])
             with col_r_btn:
                 st.markdown('<div class="btn-custom-submit">', unsafe_allow_html=True)
@@ -485,9 +667,9 @@ elif st.session_state["active_view"] == "TTU":
                 st.markdown('</div>', unsafe_allow_html=True)
 
             if btn_daftar_review:
-                st.success("✅ Pendaftaran Review Berhasil Dikirim!")
+                if simpan_review(r_nim, r_nama, r_prodi, r_peminatan, r_judul, r_pemb1, r_pemb2, r_rev1, r_rev2):
+                    st.success("✅ Pendaftaran Review Berhasil Dikirim dan Disimpan ke Database!")
 
- 
     with tab3:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## PENDAFTARAN YUDISIUM")
@@ -524,8 +706,8 @@ elif st.session_state["active_view"] == "TTU":
                 st.markdown('</div>', unsafe_allow_html=True)
 
             if btn_daftar_yudisium:
-                st.success("✅ Pendaftaran Yudisium Berhasil Dikirim!")
-
+                if simpan_yudisium():
+                    st.success("✅ Pendaftaran Yudisium Berhasil Dikirim dan Disimpan ke Database!")
 
 
 elif st.session_state["active_view"] == "KP":
@@ -538,7 +720,6 @@ elif st.session_state["active_view"] == "KP":
         "📋 5. Daftar KP"
     ])
     
-   
     with tab_kp1:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## DAFTAR SARASEHAN")
@@ -567,8 +748,9 @@ elif st.session_state["active_view"] == "KP":
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 if btn_daftar_sarasehan:
-                    st.session_state["sarasehan_registered"] = True
-                    st.rerun()
+                    if simpan_sarasehan("Terdaftar"):
+                        st.session_state["sarasehan_registered"] = True
+                        st.rerun()
 
             else:
                 st.markdown(
@@ -598,7 +780,6 @@ elif st.session_state["active_view"] == "KP":
                         st.session_state["sarasehan_registered"] = False
                         st.rerun()
 
-    
     with tab_kp2:
         st.subheader("🏢 List Tempat Kerja Praktek (KP)")
         st.write("Daftar perusahaan atau instansi mitra yang menerima Kerja Praktek:")
@@ -609,7 +790,6 @@ elif st.session_state["active_view"] == "KP":
         ])
         st.dataframe(df_tempat_kp, use_container_width=True, hide_index=True)
 
-    
     with tab_kp3:
         st.subheader("📢 Pengumuman Kerja Praktek")
         st.markdown(
@@ -623,20 +803,18 @@ elif st.session_state["active_view"] == "KP":
             unsafe_allow_html=True
         )
 
-    
     with tab_kp4:
         st.subheader("📄 Pengajuan Surat Permohonan KP")
         with st.form("form_surat_kp"):
-            st.text_input("Nama Instansi / Perusahaan Tujuan", placeholder="Masukkan nama perusahaan...")
-            st.text_area("Alamat Lengkap Perusahaan", placeholder="Masukkan alamat lengkap...")
-            st.text_input("Ditujukan Kepada (Jabatan/HRD)", placeholder="Contoh: HRD Manager / Kepala Divisi IT")
+            instansi_input = st.text_input("Nama Instansi / Perusahaan Tujuan", placeholder="Masukkan nama perusahaan...")
+            alamat_input = st.text_area("Alamat Lengkap Perusahaan", placeholder="Masukkan alamat lengkap...")
+            ditujukan_input = st.text_input("Ditujukan Kepada (Jabatan/HRD)", placeholder="Contoh: HRD Manager / Kepala Divisi IT")
             submitted_surat = st.form_submit_button("Kirim Pengajuan Surat")
             if submitted_surat:
-                st.success("✅ Pengajuan Surat Permohonan KP Berhasil Dikirim!")
+                if simpan_surat_kp(instansi_input, alamat_input, ditujukan_input):
+                    st.success("✅ Pengajuan Surat Permohonan KP Berhasil Dikirim dan Disimpan ke Database!")
 
-    
     with tab_kp5:
-        
         st.markdown(
             """
             <div class="announcement-box">
@@ -646,7 +824,6 @@ elif st.session_state["active_view"] == "KP":
             unsafe_allow_html=True
         )
 
-       
         st.markdown(
             """
             <div class="warning-box">
@@ -665,7 +842,6 @@ elif st.session_state["active_view"] == "KP":
 
         st.write("")
 
-        
         col_kp_left, col_kp_right = st.columns([1, 3])
 
         with col_kp_left:
@@ -683,14 +859,12 @@ elif st.session_state["active_view"] == "KP":
             kp_nim = st.text_input("NIM KP", value="672015002", label_visibility="collapsed", key="kp_nim")
             kp_nama = st.text_input("Nama KP", value="ANDHIKA PUTRA UTOMO", label_visibility="collapsed", key="kp_nama")
             
-            
             col_mk1, col_mk2 = st.columns(2)
             with col_mk1:
                 kp_mk1 = st.checkbox("KERJA PRAKTEK 1", key="kp_mk1")
             with col_mk2:
                 kp_mk2 = st.checkbox("KERJA PRAKTEK 2", value=True, key="kp_mk2")
 
-           
             list_perusahaan = [
                 "Alfacart (Tangerang)",
                 "PT Solusi Teknologi Indonesia (Semarang)",
@@ -698,24 +872,20 @@ elif st.session_state["active_view"] == "KP":
                 "PT LeadGeeks Indonesia (Salatiga)"
             ]
             kp_tempat = st.selectbox("Tempat KP", list_perusahaan, label_visibility="collapsed", key="kp_tempat")
-
             
             st.markdown(
                 "<span style='color: #ef4444; font-weight: bold;'>Semua scan berkas pendaftaran KP hanya berupa gambar (jpg/png) atau pdf dengan ukuran file max 5MB.</span>",
                 unsafe_allow_html=True
             )
 
-           
             st.markdown("🖼️ **Scan Transkrip Nilai**", unsafe_allow_html=True)
             kp_transkrip_file = st.file_uploader("Scan Transkrip Nilai", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed", key="kp_transkrip_file")
 
-            
             st.markdown("🖼️ **Scan Surat Diterima Perusahaan**", unsafe_allow_html=True)
             kp_surat_file = st.file_uploader("Scan Surat Diterima Perusahaan", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed", key="kp_surat_file")
 
         st.markdown("---")
 
-        
         col_kp_btn, _ = st.columns([1.5, 3])
         with col_kp_btn:
             st.markdown('<div class="btn-kp-green">', unsafe_allow_html=True)
@@ -723,4 +893,9 @@ elif st.session_state["active_view"] == "KP":
             st.markdown('</div>', unsafe_allow_html=True)
 
         if btn_submit_kp:
-            st.success("✅ Pendaftaran Kerja Praktek Berhasil Dikirim!")
+            selected_mk = []
+            if kp_mk1: selected_mk.append("KERJA PRAKTEK 1")
+            if kp_mk2: selected_mk.append("KERJA PRAKTEK 2")
+            
+            if simpan_kp(kp_nim, kp_nama, selected_mk, kp_tempat):
+                st.success("✅ Pendaftaran Kerja Praktek Berhasil Dikirim dan Disimpan ke Database!")
