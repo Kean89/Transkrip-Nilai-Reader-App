@@ -18,20 +18,24 @@ st.markdown(
     """
     <style>
     .main {
-        background-color: #0e1117;
+        background-color: #121212;
+    }
+    .stApp {
+        background-color: #121212;
     }
     .stButton>button {
         width: 100%;
         border-radius: 8px;
         font-weight: bold;
-        background: linear-gradient(90deg, #4f46e5 0%, #3b82f6 100%);
-        color: white;
-        border: none;
+        background: #212121 !important;
+        color: #ffffff !important;
+        border: 1px solid #333333 !important;
         padding: 0.6rem 1rem;
         transition: 0.3s;
     }
     .stButton>button:hover {
-        opacity: 0.9;
+        background: #2d2d2d !important;
+        border-color: #555555 !important;
         transform: translateY(-2px);
     }
     .metric-card {
@@ -812,90 +816,27 @@ elif st.session_state["active_view"] == "KP":
             submitted_surat = st.form_submit_button("Kirim Pengajuan Surat")
             if submitted_surat:
                 if simpan_surat_kp(instansi_input, alamat_input, ditujukan_input):
-                    st.success("✅ Pengajuan Surat Permohonan KP Berhasil Dikirim dan Disimpan ke Database!")
+                    st.success("✅ Pengajuan surat permohonan KP berhasil dikirim!")
 
     with tab_kp5:
-        st.markdown(
-            """
-            <div class="announcement-box">
-                Pendaftaran Kerja Praktek Akan Ditutup Pada <b>KAMIS, 20 DESEMBER 2026</b>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown(
-            """
-            <div class="warning-box">
-                <b>Baca Sebelum Melanjutkan!</b><br><br>
-                1. Pastikan anda sudah menyiapkan seluruh berkas yang dibutuhkan.<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;• KST Terbaru yang ada matakuliah KPnya.<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;• Transkrip Terbaru yang sudah di TTD oleh Kaprogdi.<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;• Surat diterima untuk melaksanakan Kerja Praktek di Perusahaan / Instansi.<br>
-                2. Pilih Perusahaan yang tersedia di list, jika tidak ada silahkan menemui kaprogdi.<br>
-                3. Pastikan kembali data yang anda pilih / isi sudah benar dan final, karena tidak ada perubahan data setelah anda mengklik "Daftar KP".<br>
-                4. Setelah mengklik "Daftar KP" dan sukses untuk mendaftar, silahkan kumpulkan berkas diatas ke Kantor KP pada jam kerja.
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.write("")
-
-        col_kp_left, col_kp_right = st.columns([1, 3])
-
-        with col_kp_left:
-            st.markdown("**NIM**", unsafe_allow_html=True)
-            st.write("")
-            st.markdown("**Nama**", unsafe_allow_html=True)
-            st.write("")
-            st.markdown("**Makul KP**", unsafe_allow_html=True)
-            st.write("")
-            st.markdown("**List Tempat KP**", unsafe_allow_html=True)
-            st.write("")
-            st.markdown("**Berkas-Berkas**", unsafe_allow_html=True)
-
-        with col_kp_right:
-            kp_nim = st.text_input("NIM KP", value="672015002", label_visibility="collapsed", key="kp_nim")
-            kp_nama = st.text_input("Nama KP", value="ANDHIKA PUTRA UTOMO", label_visibility="collapsed", key="kp_nama")
+        st.subheader("📋 Pendaftaran Kerja Praktek (KP)")
+        with st.form("form_pendaftaran_kp"):
+            nim_kp = st.text_input("NIM Mahasiswa")
+            nama_kp = st.text_input("Nama Lengkap")
             
-            col_mk1, col_mk2 = st.columns(2)
-            with col_mk1:
-                kp_mk1 = st.checkbox("KERJA PRAKTEK 1", key="kp_mk1")
-            with col_mk2:
-                kp_mk2 = st.checkbox("KERJA PRAKTEK 2", value=True, key="kp_mk2")
-
-            list_perusahaan = [
-                "Alfacart (Tangerang)",
-                "PT Solusi Teknologi Indonesia (Semarang)",
-                "Dinas Komunikasi dan Informatika (Salatiga)",
-                "PT LeadGeeks Indonesia (Salatiga)"
-            ]
-            kp_tempat = st.selectbox("Tempat KP", list_perusahaan, label_visibility="collapsed", key="kp_tempat")
+            st.markdown("**Mata Kuliah Pendukung / Terkait KP:**")
+            mk_kp1 = st.checkbox("Pemrograman Web")
+            mk_kp2 = st.checkbox("Sistem Basis Data")
+            mk_kp3 = st.checkbox("Rekayasa Perangkat Lunak")
             
-            st.markdown(
-                "<span style='color: #ef4444; font-weight: bold;'>Semua scan berkas pendaftaran KP hanya berupa gambar (jpg/png) atau pdf dengan ukuran file max 5MB.</span>",
-                unsafe_allow_html=True
-            )
-
-            st.markdown("🖼️ **Scan Transkrip Nilai**", unsafe_allow_html=True)
-            kp_transkrip_file = st.file_uploader("Scan Transkrip Nilai", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed", key="kp_transkrip_file")
-
-            st.markdown("🖼️ **Scan Surat Diterima Perusahaan**", unsafe_allow_html=True)
-            kp_surat_file = st.file_uploader("Scan Surat Diterima Perusahaan", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed", key="kp_surat_file")
-
-        st.markdown("---")
-
-        col_kp_btn, _ = st.columns([1.5, 3])
-        with col_kp_btn:
-            st.markdown('<div class="btn-kp-green">', unsafe_allow_html=True)
-            btn_submit_kp = st.button("Daftar KP", key="btn_submit_kp")
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        if btn_submit_kp:
-            selected_mk = []
-            if kp_mk1: selected_mk.append("KERJA PRAKTEK 1")
-            if kp_mk2: selected_mk.append("KERJA PRAKTEK 2")
+            tempat_kp = st.text_input("Nama Tempat / Instansi KP")
             
-            if simpan_kp(kp_nim, kp_nama, selected_mk, kp_tempat):
-                st.success("✅ Pendaftaran Kerja Praktek Berhasil Dikirim dan Disimpan ke Database!")
+            submitted_kp = st.form_submit_button("Daftar KP Sekarang")
+            if submitted_kp:
+                selected_mk_kp = []
+                if mk_kp1: selected_mk_kp.append("Pemrograman Web")
+                if mk_kp2: selected_mk_kp.append("Sistem Basis Data")
+                if mk_kp3: selected_mk_kp.append("Rekayasa Perangkat Lunak")
+                
+                if simpan_kp(nim_kp, nama_kp, selected_mk_kp, tempat_kp):
+                    st.success("✅ Pendaftaran KP Berhasil Disimpan!")
