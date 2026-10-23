@@ -2,25 +2,27 @@ import hmac
 import io
 import re
 import sqlite3
-
+ 
 import pandas as pd
 import streamlit as st
 from PIL import Image, ImageOps
-
-
+ 
+# =====================================================================
+# KONFIGURASI
+# =====================================================================
 st.set_page_config(
     page_title="Transkrip Nilai Reader",
     page_icon="logo_transkrip.png",
     layout="wide",
 )
-
-
+ 
+# Akun yang boleh login. Tambah akun lain di sini jika perlu.
 USERS = {
-    "672023030@student.uksw.edu": {"password": "123456789", "nama": "Julius"},
+    "672023030@student.uksw.edu": {"password": "123456789", "nama": "RAYNALDO"},
 }
-
+ 
 DB_PATH = "transkrip_nilai.db"
-
+ 
 st.markdown(
     """
     <style>
@@ -67,16 +69,18 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-
-
+ 
+ 
+# =====================================================================
+# AUTENTIKASI (EMAIL + PASSWORD)
+# =====================================================================
 def cek_login(email: str, password: str) -> bool:
     user = USERS.get(email.strip().lower())
     if not user:
         return False
     return hmac.compare_digest(user["password"], password)
-
-
+ 
+ 
 def halaman_login():
     _, mid, _ = st.columns([1, 1.2, 1])
     with mid:
@@ -96,17 +100,19 @@ def halaman_login():
                 st.rerun()
             else:
                 st.error("❌ Email atau password salah.")
-
-
+ 
+ 
 if not st.session_state.get("logged_in"):
     halaman_login()
     st.stop()
-
+ 
 USER_NIM = st.session_state["user_nim"]
 USER_NAMA = st.session_state["user_nama"]
-
-
-
+ 
+ 
+# =====================================================================
+# DATABASE
+# =====================================================================
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -163,11 +169,11 @@ def init_db():
         )""")
     conn.commit()
     conn.close()
-
-
+ 
+ 
 init_db()
-
-
+ 
+ 
 def _jalankan(sql: str, params: tuple = (), pesan_error: str = "Gagal menyimpan data"):
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -178,8 +184,8 @@ def _jalankan(sql: str, params: tuple = (), pesan_error: str = "Gagal menyimpan 
     except Exception as e:
         st.error(f"{pesan_error}: {e}")
         return False
-
-
+ 
+ 
 def simpan_ke_database(mhs: dict, mk_list: list[dict]):
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -200,8 +206,8 @@ def simpan_ke_database(mhs: dict, mk_list: list[dict]):
     except Exception as e:
         st.error(f"Gagal menyimpan ke database: {e}")
         return False
-
-
+ 
+ 
 def simpan_ttu(nim, nama, prodi, peminatan, ttu_list, status, judul, pemb1, pemb2):
     return _jalankan(
         """INSERT INTO pendaftaran_ttu
@@ -210,8 +216,8 @@ def simpan_ttu(nim, nama, prodi, peminatan, ttu_list, status, judul, pemb1, pemb
         (nim, nama, prodi, peminatan, ", ".join(ttu_list), status, judul, pemb1, pemb2),
         "Gagal menyimpan data TTU",
     )
-
-
+ 
+ 
 def simpan_review(nim, nama, prodi, peminatan, judul, pemb1, pemb2, rev1, rev2):
     return _jalankan(
         """INSERT INTO pendaftaran_review
@@ -220,32 +226,32 @@ def simpan_review(nim, nama, prodi, peminatan, judul, pemb1, pemb2, rev1, rev2):
         (nim, nama, prodi, peminatan, judul, pemb1, pemb2, rev1, rev2),
         "Gagal menyimpan data Review",
     )
-
-
+ 
+ 
 def simpan_yudisium():
     return _jalankan("INSERT INTO pendaftaran_yudisium DEFAULT VALUES",
                      pesan_error="Gagal menyimpan data Yudisium")
-
-
+ 
+ 
 def simpan_sarasehan(status):
     return _jalankan("INSERT INTO pendaftaran_sarasehan (status_pendaftaran) VALUES (?)",
                      (status,), "Gagal menyimpan data Sarasehan")
-
-
+ 
+ 
 def simpan_surat_kp(instansi, alamat, ditujukan):
     return _jalankan(
         "INSERT INTO permohonan_surat_kp (instansi, alamat, ditujukan) VALUES (?,?,?)",
         (instansi, alamat, ditujukan), "Gagal menyimpan surat KP",
     )
-
-
+ 
+ 
 def simpan_kp(nim, nama, mk_list, tempat):
     return _jalankan(
         "INSERT INTO pendaftaran_kp (nim, nama, matakuliah_kp, tempat_kp) VALUES (?,?,?,?)",
         (nim, nama, ", ".join(mk_list), tempat), "Gagal menyimpan pendaftaran KP",
     )
-
-
+ 
+ 
 # =====================================================================
 # ANALISIS TRANSKRIP LOKAL (TANPA API / AI)
 # =====================================================================
@@ -260,15 +266,15 @@ RE_NOKODE = re.compile(
     rf"(?P<nama>[A-Za-z][A-Za-z0-9 &/,.()\-]+?)\s+(?P<sks>\d{{1,2}})\s+(?P<nilai>{GRADE})(?=\s|$)"
 )
 SKIP_PREFIX = ("jumlah", "total", "ipk", "indeks", "semester", "sks", "program", "nama", "nim")
-
+ 
 BOBOT = {"A": 4.0, "A-": 3.75, "AB": 3.5, "B+": 3.5, "B": 3.0, "B-": 2.75,
          "BC": 2.5, "C+": 2.5, "C": 2.0, "D+": 1.5, "D": 1.0, "E": 0.0}
-
-
+ 
+ 
 def ocr_gambar(img: Image.Image) -> str:
     """OCR lokal dengan Tesseract. Gambar diperkecil & dijadikan grayscale agar cepat."""
     import pytesseract
-
+ 
     img = ImageOps.exif_transpose(img).convert("L")
     img = ImageOps.autocontrast(img)
     maks = 2200
@@ -279,14 +285,14 @@ def ocr_gambar(img: Image.Image) -> str:
         return pytesseract.image_to_string(img, lang="ind+eng", config="--oem 1 --psm 6")
     except pytesseract.TesseractError:
         return pytesseract.image_to_string(img, lang="eng", config="--oem 1 --psm 6")
-
-
+ 
+ 
 def ekstrak_teks(file_bytes: bytes, ext: str) -> str:
     if ext in ("png", "jpg", "jpeg"):
         return ocr_gambar(Image.open(io.BytesIO(file_bytes)))
-
+ 
     import pdfplumber
-
+ 
     teks = []
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         for page in pdf.pages:
@@ -295,13 +301,13 @@ def ekstrak_teks(file_bytes: bytes, ext: str) -> str:
                 t = ocr_gambar(page.to_image(resolution=200).original)
             teks.append(t)
     return "\n".join(teks)
-
-
+ 
+ 
 def _cari(pola: str, teks: str, flags=re.IGNORECASE) -> str:
     m = re.search(pola, teks, flags)
     return m.group(1).strip() if m else "-"
-
-
+ 
+ 
 def parse_profil(teks: str) -> dict:
     universitas = "-"
     for line in teks.splitlines()[:15]:
@@ -315,8 +321,8 @@ def parse_profil(teks: str) -> dict:
         "universitas": universitas,
         "ipk": _cari(r"(?:IPK|Indeks\s+Prestasi\s+Kumulatif|GPA)[^\d\n]{0,30}(\d[.,]\d{1,2})", teks).replace(",", "."),
     }
-
-
+ 
+ 
 def parse_matakuliah(teks: str) -> list[dict]:
     hasil = []
     for line in teks.splitlines():
@@ -341,8 +347,8 @@ def parse_matakuliah(teks: str) -> list[dict]:
             "nilai": m.group("nilai"),
         })
     return hasil
-
-
+ 
+ 
 def hitung_ipk(mk_list: list[dict]) -> str:
     total_sks, total_mutu = 0, 0.0
     for mk in mk_list:
@@ -356,8 +362,8 @@ def hitung_ipk(mk_list: list[dict]) -> str:
         total_sks += sks
         total_mutu += sks * bobot
     return f"{total_mutu / total_sks:.2f}" if total_sks else "-"
-
-
+ 
+ 
 @st.cache_data(show_spinner=False)
 def analisis_transkrip(file_bytes: bytes, ext: str) -> dict:
     """Hasil di-cache: file yang sama tidak akan diproses ulang."""
@@ -367,13 +373,15 @@ def analisis_transkrip(file_bytes: bytes, ext: str) -> dict:
     if profil["ipk"] == "-" and mk:
         profil["ipk"] = hitung_ipk(mk) + " (dihitung otomatis)"
     return {"mahasiswa": profil, "mata_kuliah": mk}
-
-
-
+ 
+ 
+# =====================================================================
+# STATE & SIDEBAR
+# =====================================================================
 st.session_state.setdefault("active_view", "HOME")
 st.session_state.setdefault("sarasehan_registered", False)
 st.session_state.setdefault("analisis_id", 0)
-
+ 
 with st.sidebar:
     st.image("https://img.icons8.com/clouds/200/graduation-cap.png", width=100)
     st.title("👤 Akun")
@@ -383,7 +391,7 @@ with st.sidebar:
         for k in ("logged_in", "user_email", "user_nama", "user_nim", "hasil_analisis"):
             st.session_state.pop(k, None)
         st.rerun()
-
+ 
     st.markdown("---")
     st.markdown("### 📌 Petunjuk Penggunaan")
     st.markdown("""
@@ -394,9 +402,11 @@ with st.sidebar:
     """)
     st.markdown("---")
     st.caption("Dibuat dengan ❤️ menggunakan Streamlit")
-
-
-
+ 
+ 
+# =====================================================================
+# NAVIGASI
+# =====================================================================
 btn_col1, btn_col2, btn_col3, _ = st.columns([1.2, 1.8, 2.2, 4])
 with btn_col1:
     if st.button("🏠 HOME", key="btn_home_nav"):
@@ -410,11 +420,13 @@ with btn_col3:
     if st.button("🏆 Tugas Talenta Unggul (TTU)", key="btn_ttu_nav"):
         st.session_state["active_view"] = "TTU"
         st.rerun()
-
+ 
 st.markdown("---")
-
-
-
+ 
+ 
+# =====================================================================
+# HOME: ANALISIS TRANSKRIP
+# =====================================================================
 if st.session_state["active_view"] == "HOME":
     st.title("Transkrip Nilai Reader")
     st.markdown(
@@ -422,18 +434,18 @@ if st.session_state["active_view"] == "HOME":
         "langsung di komputer Anda, tanpa API Key dan tanpa menunggu server AI."
     )
     st.markdown("---")
-
+ 
     uploaded_file = st.file_uploader(
         "📂 Unggah File Transkrip Nilai (PDF / Gambar)",
         type=["pdf", "png", "jpg", "jpeg"],
     )
-
+ 
     if uploaded_file is not None:
         ext = uploaded_file.name.split(".")[-1].lower()
         file_bytes = uploaded_file.getvalue()
-
+ 
         col_preview, col_result = st.columns([1, 1.2], gap="large")
-
+ 
         with col_preview:
             st.markdown("### 📄 Preview Dokumen")
             if ext in ("png", "jpg", "jpeg"):
@@ -441,10 +453,10 @@ if st.session_state["active_view"] == "HOME":
                          caption=f"File: {uploaded_file.name}", use_container_width=True)
             else:
                 st.success(f"📄 File PDF berhasil diunggah: **{uploaded_file.name}**")
-
+ 
         with col_result:
             st.markdown("### ⚙️ Kontrol & Hasil Analisis")
-
+ 
             if st.button("🔍 Mulai Analisis Transkrip Sekarang"):
                 with st.spinner("Membaca transkrip..."):
                     try:
@@ -463,12 +475,12 @@ if st.session_state["active_view"] == "HOME":
                             )
                         else:
                             st.error(f"❌ Terjadi kesalahan saat memproses dokumen: {e}")
-
+ 
             hasil = st.session_state.get("hasil_analisis")
             if hasil:
                 aid = st.session_state["analisis_id"]
                 mhs = hasil["mahasiswa"]
-
+ 
                 st.markdown("---")
                 if not hasil["mata_kuliah"]:
                     st.warning(
@@ -477,7 +489,7 @@ if st.session_state["active_view"] == "HOME":
                     )
                 else:
                     st.success(f"✨ Ekstraksi selesai: {len(hasil['mata_kuliah'])} mata kuliah terdeteksi.")
-
+ 
                 st.markdown("#### 👤 Profil Mahasiswa (bisa diedit)")
                 c1, c2 = st.columns(2)
                 with c1:
@@ -487,7 +499,7 @@ if st.session_state["active_view"] == "HOME":
                 with c2:
                     uni_v = st.text_input("Universitas", mhs["universitas"], key=f"p_uni_{aid}")
                     ipk_v = st.text_input("IPK Kumulatif", mhs["ipk"], key=f"p_ipk_{aid}")
-
+ 
                 st.markdown("#### 📚 Daftar Mata Kuliah (bisa diedit)")
                 df = pd.DataFrame(hasil["mata_kuliah"], columns=["kode", "nama_mk", "sks", "nilai"])
                 df.columns = ["Kode MK", "Nama Mata Kuliah", "SKS", "Nilai"]
@@ -495,7 +507,7 @@ if st.session_state["active_view"] == "HOME":
                     df, num_rows="dynamic", use_container_width=True,
                     hide_index=True, key=f"editor_{aid}",
                 )
-
+ 
                 col_s, col_d = st.columns(2)
                 with col_s:
                     if st.button("💾 Simpan ke Database", key="btn_simpan_transkrip"):
@@ -515,13 +527,15 @@ if st.session_state["active_view"] == "HOME":
                         file_name="transkrip_extracted.csv",
                         mime="text/csv",
                     )
-
-
-
+ 
+ 
+# =====================================================================
+# TTU
+# =====================================================================
 elif st.session_state["active_view"] == "TTU":
-
+ 
     tab1, tab2, tab3 = st.tabs(["📋 Daftar TTU", "🔍 Daftar Review", "🎓 Daftar Yudisium"])
-
+ 
     with tab1:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## PENDAFTARAN TUGAS TALENTA UNGGUL")
@@ -530,7 +544,7 @@ elif st.session_state["active_view"] == "TTU":
             unsafe_allow_html=True,
         )
         st.markdown('<div class="form-header">FORM PENDAFTARAN TUGAS TALENTA UNGGUL SEMESTER GANJIL 2026-2027</div>', unsafe_allow_html=True)
-
+ 
         with st.container():
             st.write("")
             col_nim, col_nama = st.columns(2)
@@ -538,13 +552,13 @@ elif st.session_state["active_view"] == "TTU":
                 nim = st.text_input("NIM", value=USER_NIM)
             with col_nama:
                 nama = st.text_input("Nama", value=USER_NAMA)
-
+ 
             col_prodi, col_peminatan = st.columns(2)
             with col_prodi:
                 prodi = st.text_input("Program Studi", value="S1 TEKNIK INFORMATIKA")
             with col_peminatan:
                 peminatan = st.text_input("Peminatan", placeholder="peminatan/bidang dari topik anda...")
-
+ 
             col_ttu_ambil, col_status = st.columns(2)
             with col_ttu_ambil:
                 st.markdown("**Tugas Talenta Unggul Yang Akan Diambil** <span class='badge-req'>⚠️</span>", unsafe_allow_html=True)
@@ -554,10 +568,10 @@ elif st.session_state["active_view"] == "TTU":
             with col_status:
                 st.markdown("**Status Tugas Talenta Unggul**", unsafe_allow_html=True)
                 status_ttu = st.selectbox("Status", ["Baru", "Lanjut"], label_visibility="collapsed")
-
+ 
             st.markdown("**Judul Tugas Talenta Unggul** <span class='badge-req'>⚠️</span>", unsafe_allow_html=True)
             judul_ttu = st.text_input("Judul", placeholder="isi judul tugas talenta unggul anda. jika belum ada, isi -", label_visibility="collapsed")
-
+ 
             col_pemb1, col_pemb2 = st.columns(2)
             with col_pemb1:
                 st.markdown("**Usulan Pembimbing 1**", unsafe_allow_html=True)
@@ -565,7 +579,7 @@ elif st.session_state["active_view"] == "TTU":
             with col_pemb2:
                 st.markdown("**Usulan Pembimbing 2**", unsafe_allow_html=True)
                 pemb2 = st.text_input("Pembimbing 2", placeholder="isi usulan pembimbing anda...", label_visibility="collapsed")
-
+ 
             col_doc, col_transkrip = st.columns(2)
             with col_doc:
                 st.markdown("📄 **Dokumen Tugas Talenta Unggul (PDF/Ms.Word)** <span class='badge-req'>⚠️ Max 15MB</span>", unsafe_allow_html=True)
@@ -573,12 +587,12 @@ elif st.session_state["active_view"] == "TTU":
             with col_transkrip:
                 st.markdown("🖼️ **Scan Transkrip Nilai** <span class='badge-req'>⚠️ Max 5MB</span>", unsafe_allow_html=True)
                 st.file_uploader("Upload Transkrip", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed", key="transkrip_ttu")
-
+ 
             st.markdown("---")
             col_btn, _ = st.columns([1, 3])
             with col_btn:
                 btn_daftar = st.button("DAFTAR", key="btn_submit_ttu")
-
+ 
             if btn_daftar:
                 if not judul_ttu or judul_ttu == "-":
                     st.warning("⚠️ Mohon isi Judul Tugas Talenta Unggul terlebih dahulu!")
@@ -590,7 +604,7 @@ elif st.session_state["active_view"] == "TTU":
                     ] if on]
                     if simpan_ttu(nim, nama, prodi, peminatan, selected_ttu, status_ttu, judul_ttu, pemb1, pemb2):
                         st.success("✅ Pendaftaran Tugas Talenta Unggul Berhasil Dikirim dan Disimpan ke Database!")
-
+ 
     with tab2:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## PENDAFTARAN REVIEW")
@@ -599,7 +613,7 @@ elif st.session_state["active_view"] == "TTU":
             unsafe_allow_html=True,
         )
         st.markdown('<div class="form-header">FORM PENDAFTARAN REVIEW</div>', unsafe_allow_html=True)
-
+ 
         with st.container():
             st.write("")
             col_r_nim, col_r_nama = st.columns(2)
@@ -607,20 +621,20 @@ elif st.session_state["active_view"] == "TTU":
                 r_nim = st.text_input("NIM", value=USER_NIM, key="r_nim")
             with col_r_nama:
                 r_nama = st.text_input("Nama", value=USER_NAMA, key="r_nama")
-
+ 
             col_r_prodi, col_r_peminatan = st.columns(2)
             with col_r_prodi:
                 r_prodi = st.text_input("Program Studi", value="S1 TEKNIK INFORMATIKA", key="r_prodi")
             with col_r_peminatan:
                 r_peminatan = st.text_input("Peminatan", value="web, webservice, php", key="r_peminatan")
-
+ 
             st.markdown("**Judul Tugas Akhir**", unsafe_allow_html=True)
             r_judul = st.text_input(
                 "Judul Tugas Akhir",
                 value="Perancangan Website Sistem Informasi Tugas Akhir Dengan Teknologi SOAP Web Services",
                 label_visibility="collapsed", key="r_judul",
             )
-
+ 
             col_r_pemb1, col_r_pemb2 = st.columns(2)
             with col_r_pemb1:
                 st.markdown("**Pembimbing 1**", unsafe_allow_html=True)
@@ -628,7 +642,7 @@ elif st.session_state["active_view"] == "TTU":
             with col_r_pemb2:
                 st.markdown("**Pembimbing 2**", unsafe_allow_html=True)
                 r_pemb2 = st.text_input("Pembimbing 2", value="Belum Ada Data", label_visibility="collapsed", key="r_pemb2")
-
+ 
             col_r_rev1, col_r_rev2 = st.columns(2)
             with col_r_rev1:
                 st.markdown("**Reviewer 1**", unsafe_allow_html=True)
@@ -636,7 +650,7 @@ elif st.session_state["active_view"] == "TTU":
             with col_r_rev2:
                 st.markdown("**Reviewer 2**", unsafe_allow_html=True)
                 r_rev2 = st.text_input("Reviewer 2", value="Belum Ada Data", label_visibility="collapsed", key="r_rev2")
-
+ 
             col_r_doc, col_r_transkrip = st.columns(2)
             with col_r_doc:
                 st.markdown("📄 **Dokumen Akhir (PDF/Ms.Word)** <span class='badge-req'>⚠️ *Ukuran file max 15MB</span>", unsafe_allow_html=True)
@@ -644,43 +658,45 @@ elif st.session_state["active_view"] == "TTU":
             with col_r_transkrip:
                 st.markdown("🖼️ **Scan Transkrip Nilai** <span class='badge-req'>⚠️ *Ukuran file max 5MB</span>", unsafe_allow_html=True)
                 st.file_uploader("Upload Scan Transkrip", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed", key="r_transkrip_file")
-
+ 
             st.markdown("---")
             col_r_btn, _ = st.columns([1.5, 3])
             with col_r_btn:
                 st.markdown('<div class="btn-custom-submit">', unsafe_allow_html=True)
                 btn_daftar_review = st.button("DAFTAR REVIEW", key="btn_submit_review")
                 st.markdown('</div>', unsafe_allow_html=True)
-
+ 
             if btn_daftar_review:
                 if simpan_review(r_nim, r_nama, r_prodi, r_peminatan, r_judul, r_pemb1, r_pemb2, r_rev1, r_rev2):
                     st.success("✅ Pendaftaran Review Berhasil Dikirim dan Disimpan ke Database!")
-
+ 
     with tab3:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## PENDAFTARAN YUDISIUM")
         st.markdown('<div class="form-header">DAFTAR YUDISIUM</div>', unsafe_allow_html=True)
-
+ 
         with st.container():
             st.write("")
             st.markdown('<div class="success-box">Yudisium Akan Dilakukan Pada Jumat, 14 Desember 2026</div>', unsafe_allow_html=True)
             st.markdown('<div class="announcement-box">ℹ️ Pendaftaran Yudisium Dibuka Sampai Rabu, 12 Desember 2026</div>', unsafe_allow_html=True)
             st.write("")
-
+ 
             col_y_btn, _ = st.columns([1.8, 3])
             with col_y_btn:
                 st.markdown('<div class="btn-custom-submit">', unsafe_allow_html=True)
                 btn_daftar_yudisium = st.button("DAFTAR YUDISIUM", key="btn_submit_yudisium")
                 st.markdown('</div>', unsafe_allow_html=True)
-
+ 
             if btn_daftar_yudisium:
                 if simpan_yudisium():
                     st.success("✅ Pendaftaran Yudisium Berhasil Dikirim dan Disimpan ke Database!")
-
-
-
+ 
+ 
+# =====================================================================
+# KERJA PRAKTEK
+# =====================================================================
 elif st.session_state["active_view"] == "KP":
-
+ 
     tab_kp1, tab_kp2, tab_kp3, tab_kp4, tab_kp5 = st.tabs([
         "👥 1. Daftar Sarasehan",
         "🏢 2. List Tempat KP",
@@ -688,12 +704,12 @@ elif st.session_state["active_view"] == "KP":
         "📄 4. Surat Permohonan",
         "📋 5. Daftar KP",
     ])
-
+ 
     with tab_kp1:
         st.markdown("### SEMESTER GANJIL 2026-2027")
         st.markdown("## DAFTAR SARASEHAN")
         st.markdown('<div class="form-header">Daftar Sarasehan</div>', unsafe_allow_html=True)
-
+ 
         with st.container():
             st.write("")
             if not st.session_state["sarasehan_registered"]:
@@ -727,7 +743,7 @@ elif st.session_state["active_view"] == "KP":
                     if st.button("🔄 Batalkan / Reset Pendaftaran", key="btn_reset_sarasehan"):
                         st.session_state["sarasehan_registered"] = False
                         st.rerun()
-
+ 
     with tab_kp2:
         st.subheader("🏢 List Tempat Kerja Praktek (KP)")
         st.write("Daftar perusahaan atau instansi mitra yang menerima Kerja Praktek:")
@@ -737,7 +753,7 @@ elif st.session_state["active_view"] == "KP":
             {"No": 3, "Nama Perusahaan": "Alfacart (Tangerang)", "Kota": "Tangerang", "Kuota": "5 Mahasiswa", "Status": "Tersedia"},
         ])
         st.dataframe(df_tempat_kp, use_container_width=True, hide_index=True)
-
+ 
     with tab_kp3:
         st.subheader("📢 Pengumuman Kerja Praktek")
         st.markdown(
@@ -750,7 +766,7 @@ elif st.session_state["active_view"] == "KP":
             """,
             unsafe_allow_html=True,
         )
-
+ 
     with tab_kp4:
         st.subheader("📄 Pengajuan Surat Permohonan KP")
         with st.form("form_surat_kp"):
@@ -760,20 +776,20 @@ elif st.session_state["active_view"] == "KP":
             if st.form_submit_button("Kirim Pengajuan Surat"):
                 if simpan_surat_kp(instansi_input, alamat_input, ditujukan_input):
                     st.success("✅ Pengajuan surat permohonan KP berhasil dikirim!")
-
+ 
     with tab_kp5:
         st.subheader("📋 Pendaftaran Kerja Praktek (KP)")
         with st.form("form_pendaftaran_kp"):
             nim_kp = st.text_input("NIM Mahasiswa", value=USER_NIM)
             nama_kp = st.text_input("Nama Lengkap", value=USER_NAMA)
-
+ 
             st.markdown("**Mata Kuliah Pendukung / Terkait KP:**")
             mk_kp1 = st.checkbox("Pemrograman Web")
             mk_kp2 = st.checkbox("Sistem Basis Data")
             mk_kp3 = st.checkbox("Rekayasa Perangkat Lunak")
-
+ 
             tempat_kp = st.text_input("Nama Tempat / Instansi KP")
-
+ 
             if st.form_submit_button("Daftar KP Sekarang"):
                 selected_mk_kp = [n for n, on in [
                     ("Pemrograman Web", mk_kp1),
