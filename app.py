@@ -6,9 +6,7 @@ import pandas as pd
 import streamlit as st
 from PIL import Image, ImageOps
 
-# -----------------------------------------------------------------------------
-# CONFIG & STYLING
-# -----------------------------------------------------------------------------
+
 st.set_page_config(
     page_title="Transkrip Nilai Reader",
     page_icon="🎓",
@@ -21,7 +19,7 @@ USERS = {
 
 DB_PATH = "transkrip_nilai.db"
 
-# Data Kurikulum 2026 sebagai referensi pencocokan otomatis
+
 KURIKULUM_2026_DATA = [
     {"kode": "MU114", "nama": "Pancasila", "sks": 2, "kategori": "MKDU Wajib Negara"},
     {"kode": "MU115", "nama": "Kewarganegaraan", "sks": 2, "kategori": "MKDU Wajib Negara"},
@@ -154,9 +152,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# -----------------------------------------------------------------------------
-# AUTH & DATABASE FUNCTIONS
-# -----------------------------------------------------------------------------
+
 def cek_login(email: str, password: str) -> bool:
     user = USERS.get(email.strip().lower())
     if not user:
@@ -330,9 +326,7 @@ def simpan_kp(nim, nama, mk_list, tempat):
         (nim, nama, ", ".join(mk_list), tempat), "Gagal menyimpan pendaftaran KP",
     )
 
-# -----------------------------------------------------------------------------
-# EKSTRAKSI & ANALISIS PRO (TABEL + DATABASE KURIKULUM + REGEX)
-# -----------------------------------------------------------------------------
+
 GRADE = r"(?:A-|AB|A|B\+|B-|BC|B|C\+|C|D\+|D|E|T)"
 SKIP_PREFIX = ("jumlah", "total", "ipk", "indeks", "semester", "sks", "program", "nama", "nim", "fakultas", "universitas", "no", "kode")
 BOBOT = {"A": 4.0, "A-": 3.75, "AB": 3.5, "B+": 3.5, "B": 3.0, "B-": 2.75,
@@ -397,7 +391,7 @@ def parse_matakuliah_pro(teks: str, tables: list) -> list[dict]:
     hasil = []
     seen = set()
     
-    # 1. Ekstraksi dari tabel PDF jika ada
+   
     if tables:
         for row in tables:
             row_text = " ".join([str(c) for c in row if c])
@@ -427,7 +421,7 @@ def parse_matakuliah_pro(teks: str, tables: list) -> list[dict]:
                         seen.add(key)
                         hasil.append({"kode": kode, "nama_mk": nama_mk, "sks": sks, "nilai": grade})
 
-    # 2. Pencocokan langsung dengan Database Kurikulum 2026
+   
     for kur in KURIKULUM_2026_DATA:
         if kur["kode"] in teks or kur["nama"].lower() in teks.lower():
             pos = teks.find(kur["kode"])
@@ -448,7 +442,7 @@ def parse_matakuliah_pro(teks: str, tables: list) -> list[dict]:
                             "nilai": grade
                         })
 
-    # 3. Fallback: Baris demi baris teks bebas
+   
     if not hasil:
         for line in teks.splitlines():
             line = re.sub(r"\s+", " ", line).strip()
@@ -496,9 +490,7 @@ def analisis_transkrip(file_bytes: bytes, ext: str) -> dict:
         profil["ipk"] = hitung_ipk(mk) + " (dihitung otomatis)"
     return {"mahasiswa": profil, "mata_kuliah": mk, "raw_teks": teks}
 
-# -----------------------------------------------------------------------------
-# INTERFACE NAVIGATION & VIEWS
-# -----------------------------------------------------------------------------
+
 st.session_state.setdefault("active_view", "HOME")
 st.session_state.setdefault("sarasehan_registered", False)
 st.session_state.setdefault("analisis_id", 0)
@@ -547,7 +539,6 @@ if st.session_state["active_view"] == "HOME":
     st.title("Transkrip Nilai Reader")
     st.markdown(
         "Ekstrak data mahasiswa dan daftar mata kuliah dari transkrip nilai "
-        "langsung di komputer Anda, tanpa API Key dan tanpa menunggu server AI."
     )
     st.markdown("---")
     uploaded_file = st.file_uploader(
@@ -581,7 +572,7 @@ if st.session_state["active_view"] == "HOME":
                 mhs = hasil["mahasiswa"]
                 st.markdown("---")
                 
-                # Tampilkan expander debug teks mentah agar transparan
+                
                 with st.expander("🔍 Lihat Teks Mentah yang Terbaca (Debug OCR)"):
                     st.text(hasil.get("raw_teks", "Tidak ada teks."))
 
