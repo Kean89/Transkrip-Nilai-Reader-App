@@ -1,5 +1,7 @@
 streamlit
-google-genai
-Pillow
-pypdf
 pandas
+openpyxl
+Pillow
+pdfplumber
+pytesseract
+PyMuPDF
