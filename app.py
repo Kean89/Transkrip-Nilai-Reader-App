@@ -472,7 +472,7 @@ st.session_state.setdefault("analisis_id", 0)
 
 with st.sidebar:
     st.image("https://img.icons8.com/clouds/200/graduation-cap.png", width=100)
-    st.title("👤 Akun Mahasiswa")
+    st.title("👤 Akun admin")
     st.write(f"**{USER_NAMA}**")
     st.caption(st.session_state["user_email"])
     if st.button("🚪 Logout", key="btn_logout"):
