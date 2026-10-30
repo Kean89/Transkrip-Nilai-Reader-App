@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- INISIALISASI SESSION STATE DI AWAL (Mencegah KeyError) ---
+# --- INISIALISASI SESSION STATE DI AWAL ---
 st.session_state.setdefault("logged_in", False)
 st.session_state.setdefault("active_view", "HOME")
 st.session_state.setdefault("sarasehan_registered", False)
@@ -442,75 +442,132 @@ def buat_ringkasan_kurikulum(mk_list: list[dict], jurusan_pilih: str, peminatan_
            
     sisa_per_kategori = {kat: kategori_total[kat] - kategori_lulus.get(kat, 0) for kat in kategori_total}
     return {"detail": detail_status, "sisa": sisa_per_kategori}
-
-# --- FUNGSI VALIDASI SYARAT AKADEMIK BARU ---
+# --- FUNGSI EVALUASI SYARAT AKADEMIK LENGKAP DENGAN ALASAN ---
 def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
     total_sks_lulus = 0
     list_nilai_huruf = []
     passed_mk_dict = {}
-
+    
+    # Penampung detail untuk pesan alasan
+    mk_d_atau_e = []
+    mk_nilai_e = []
+    mk_nilai_d = []
+    sks_d = 0
+    
     for mk in mk_list:
         nilai = str(mk.get("nilai", "-")).strip().upper()
         try:
             sks = int(mk.get("sks", 0))
         except:
             sks = 0
-        nama = str(mk.get("nama_mk", "")).strip().lower()
-
+        nama = str(mk.get("nama_mk", "")).strip()
+        kode = str(mk.get("kode", "")).strip()
+        nama_lower = nama.lower()
+        
         list_nilai_huruf.append(nilai)
-        passed_mk_dict[nama] = nilai
+        passed_mk_dict[nama_lower] = {"nilai": nilai, "kode": kode, "nama": nama, "sks": sks}
+        
         if nilai not in ("E", "T", "-"):
             total_sks_lulus += sks
-
-    # 1. Syarat KP: >= 108 SKS dan MK wajib (Agama, Pancasila, Kewarganegaraan, Bahasa Indonesia, Metodologi Penelitian) minimal C
-    mk_kp_syarat = ["pendidikan agama", "pancasila", "kewarganegaraan", "bahasa indonesia", "metodologi penelitian"]
-    kp_mk_lulus = True
-    for syarat in mk_kp_syarat:
-        ditemukan = False
-        for nama_mk, val in passed_mk_dict.items():
-            if syarat in nama_mk:
-                if BOBOT.get(val, 0.0) >= 2.0:
-                    ditemukan = True
-                    break
-        if not ditemukan:
-            kp_mk_lulus = False
-            break
-
-    syarat_kp = (total_sks_lulus >= 108) and kp_mk_lulus
-
-    # 2. Syarat TTU 1: Sudah mengambil 120 SKS & MK Wajib sudah diambil/lulus
-    syarat_ttu1 = (total_sks_lulus >= 120)
-
-    # 3. Syarat Review: Tidak ada nilai D/E dan sedang mengambil TTU 2 dan atau TTU 3
-    ada_d_e = any(val in ("D", "D+", "E") for val in list_nilai_huruf)
-    syarat_review = not ada_d_e
-
-    # 4. Syarat Yudisium: minimal 144 SKS, tdk ada E, max 3 nilai D dengan total 8 SKS, MK wajib min C, sudah ambil KP & LKP, TTU 1-3
-    jumlah_d = sum(1 for val in list_nilai_huruf if val in ("D", "D+"))
-    sks_d = sum(int(mk.get("sks", 0)) for mk in mk_list if str(mk.get("nilai", "")).upper() in ("D", "D+"))
-    ada_e = ("E" in list_nilai_huruf)
-    syarat_yudisium = (total_sks_lulus >= 144) and (not ada_e) and (jumlah_d <= 3 and sks_d <= 8)
+            
+        if nilai in ("D", "D+"):
+            mk_nilai_d.append(f"{nama} ({kode}) [Nilai: {nilai}]")
+            mk_d_atau_e.append(f"{nama} ({kode}) [Nilai: {nilai}]")
+            sks_d += sks
+        elif nilai in ("E", "T"):
+            mk_nilai_e.append(f"{nama} ({kode}) [Nilai: {nilai}]")
+            mk_d_atau_e.append(f"{nama} ({kode}) [Nilai: {nilai}]")
 
     pesan_rekomendasi = []
+
+    # 1. SYARAT KERJA PRAKTEK (KP)
+    mk_kp_syarat = [
+        "pendidikan agama",
+        "pancasila",
+        "kewarganegaraan",
+        "bahasa indonesia",
+        "metodologi penelitian"
+    ]
+    
+    mk_kp_belum_c = []
+    for syarat in mk_kp_syarat:
+        ditemukan_dan_lulus = False
+        for nama_mk_lower, info in passed_mk_dict.items():
+            if syarat in nama_mk_lower:
+                if BOBOT.get(info["nilai"], 0.0) >= 2.0:  # Nilai min C (Bobot >= 2.0)
+                    ditemukan_dan_lulus = True
+                    break
+                else:
+                    mk_kp_belum_c.append(f"{info['nama']} ({info['kode']}) - Nilai: {info['nilai']}")
+                    ditemukan_dan_lulus = True
+                    break
+        if not ditemukan_dan_lulus:
+            mk_kp_belum_c.append(f"{syarat.title()} (Belum diambil / Tidak ditemukan)")
+
+    syarat_kp_sks = total_sks_lulus >= 108
+    syarat_kp_mk = len(mk_kp_belum_c) == 0
+    syarat_kp = syarat_kp_sks and syarat_kp_mk
+
     if syarat_kp:
         pesan_rekomendasi.append("✅ Anda bisa daftar **Kerja Praktek (KP)**.")
     else:
-        pesan_rekomendasi.append("❌ Belum memenuhi syarat KP (Min. 108 SKS & MK Wajib min C).")
+        alasan_kp = []
+        if not syarat_kp_sks:
+            alasan_kp.append(f"Total SKS lulus baru **{total_sks_lulus} SKS** (Kurang {108 - total_sks_lulus} SKS dari syarat minimal 108 SKS).")
+        if not syarat_kp_mk:
+            alasan_kp.append("Mata kuliah wajib KP berikut belum mencapai nilai minimal C:\n      - " + "\n      - ".join(mk_kp_belum_c))
+        
+        pesan_rekomendasi.append(
+            "❌ **Belum memenuhi syarat KP (Min. 108 SKS & MK Wajib min C).**\n" +
+            "   *Alasan:*\n   * " + "\n   * ".join(alasan_kp)
+        )
 
+    # 2. SYARAT TUGAS TALENTA UNGGUL 1 (TTU 1)
+    syarat_ttu1 = (total_sks_lulus >= 120)
     if syarat_ttu1:
         pesan_rekomendasi.append("✅ Anda bisa daftar **TTU 1** (Min. 120 SKS).")
     else:
-        pesan_rekomendasi.append("❌ Belum memenuhi syarat TTU 1 (< 120 SKS).")
+        kekurangan_sks_ttu1 = 120 - total_sks_lulus
+        pesan_rekomendasi.append(
+            f"❌ **Belum memenuhi syarat TTU 1 (< 120 SKS).**\n"
+            f"   *Alasan:* SKS Anda saat ini baru **{total_sks_lulus} SKS**, sehingga masih kurang **{kekurangan_sks_ttu1} SKS** dari batas minimal 120 SKS."
+        )
 
+    # 3. SYARAT REVIEW PROPOSAL
+    syarat_review = len(mk_d_atau_e) == 0
     if syarat_review:
         pesan_rekomendasi.append("✅ Anda bisa daftar **Review** (Tidak ada nilai D/E).")
     else:
-        pesan_rekomendasi.append("❌ Belum memenuhi syarat Review (Masih ada nilai D/E).")
+        pesan_rekomendasi.append(
+            "❌ **Belum memenuhi syarat Review (Masih ada nilai D/E).**\n"
+            f"   *Alasan:* Terdapat **{len(mk_d_atau_e)} mata kuliah** yang bernilai D/E yang harus diperbaiki terlebih dahulu:\n"
+            "      - " + "\n      - ".join(mk_d_atau_e)
+        )
+
+    # 4. SYARAT YUDISIUM
+    jumlah_d = len(mk_nilai_d)
+    ada_e = len(mk_nilai_e) > 0
+    syarat_yudisium_sks = total_sks_lulus >= 144
+    syarat_yudisium_d = (jumlah_d <= 3) and (sks_d <= 8)
+    syarat_yudisium_e = not ada_e
+
+    syarat_yudisium = syarat_yudisium_sks and syarat_yudisium_d and syarat_yudisium_e
 
     if syarat_yudisium:
         pesan_rekomendasi.append("🎉 Selamat! Anda memenuhi syarat untuk mendaftar **Yudisium**.")
     else:
-        pesan_rekomendasi.append("❌ Belum memenuhi syarat Yudisium.")
+        alasan_yudisium = []
+        if not syarat_yudisium_sks:
+            alasan_yudisium.append(f"Total SKS lulus baru **{total_sks_lulus} SKS** (Kurang {144 - total_sks_lulus} SKS dari syarat minimal 144 SKS).")
+        if ada_e:
+            alasan_yudisium.append(f"Masih terdapat nilai E/T pada mata kuliah berikut:\n      - " + "\n      - ".join(mk_nilai_e))
+        if not syarat_yudisium_d:
+            alasan_yudisium.append(f"Jumlah nilai D melebihi ketentuan (Maksimal 3 MK & total 8 SKS). Saat ini Anda memiliki **{jumlah_d} MK** bernilai D dengan total **{sks_d} SKS**:\n      - " + "\n      - ".join(mk_nilai_d))
+
+        pesan_rekomendasi.append(
+            "❌ **Belum memenuhi syarat Yudisium.**\n" +
+            "   *Alasan:*\n   * " + "\n   * ".join(alasan_yudisium)
+        )
 
     return {
         "total_sks_lulus": total_sks_lulus,
@@ -520,7 +577,7 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
         "syarat_yudisium": syarat_yudisium,
         "pesan": pesan_rekomendasi
     }
-
+    # --- SIDEBAR & NAVIGASI UTAMA ---
 with st.sidebar:
     st.image("https://img.icons8.com/clouds/200/graduation-cap.png", width=100)
     st.title("👤 Akun Mahasiswa")
@@ -560,9 +617,9 @@ with btn_col4:
         st.rerun()
 
 st.markdown("---")
-
 current_view = st.session_state.get("active_view", "HOME")
 
+# --- HALAMAN HOME ---
 if current_view == "HOME":
     st.title("Transkrip Nilai Reader & Analisis Kurikulum")
     st.markdown("Ekstrak data mahasiswa dan pantau sisa mata kuliah berdasarkan Jurusan & Peminatan secara otomatis.")
@@ -649,13 +706,13 @@ if current_view == "HOME":
                 with st.expander("📝 Lihat Detail Status Mata Kuliah Lulus/Belum"):
                     for item in ringkasan["detail"]:
                         st.markdown(f"- {item}")
-                
-                # --- INTEGRASI STATUS KELAYAKAN PENDAFTARAN ---
+               
+                # --- INTEGRASI STATUS KELAYAKAN PENDAFTARAN DENGAN DETAILED ALASAN ---
                 st.markdown("---")
                 st.markdown("### 🔍 Status Kelayakan Pendaftaran (KP, TTU, Review, Yudisium)")
                 eval_hasil = evaluasi_syarat_akademik(current_mk_list)
                 st.metric(label="Total SKS Diperoleh / Lulus", value=f"{eval_hasil['total_sks_lulus']} SKS")
-                
+               
                 for p in eval_hasil["pesan"]:
                     if "✅" in p or "🎉" in p:
                         st.success(p)
@@ -677,6 +734,7 @@ if current_view == "HOME":
                         mime="text/csv",
                     )
 
+# --- HALAMAN KURIKULUM ---
 elif current_view == "KURIKULUM":
     st.title("📚 Daftar Kurikulum 2026")
     st.markdown("Berikut adalah daftar alir Kurikulum S1 Teknik Informatika tahun 2026 yang terhubung dengan sistem database:")
@@ -701,6 +759,7 @@ elif current_view == "KURIKULUM":
     st.dataframe(filtered_df, use_container_width=True, hide_index=True)
     st.info(f"Total Mata Kuliah Ditampilkan: {len(filtered_df)} MK")
 
+# --- HALAMAN TTU ---
 elif current_view == "TTU":
     st.title("🏆 Tugas Talenta Unggul (TTU) & Review")
     st.markdown("Kelola pendaftaran Tugas Talenta Unggul, Review Proposal, dan Yudisium.")
@@ -778,6 +837,7 @@ elif current_view == "TTU":
         else:
             st.info("ℹ️ Anda sudah terdaftar dalam Sarasehan Magang.")
 
+# --- HALAMAN KP ---
 elif current_view == "KP":
     st.title("💼 Kerja Praktek (KP)")
     st.markdown("Kelola permohonan surat dan pendaftaran Kerja Praktek Anda.")
