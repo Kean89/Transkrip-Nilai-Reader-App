@@ -442,18 +442,49 @@ def buat_ringkasan_kurikulum(mk_list: list[dict], jurusan_pilih: str, peminatan_
            
     sisa_per_kategori = {kat: kategori_total[kat] - kategori_lulus.get(kat, 0) for kat in kategori_total}
     return {"detail": detail_status, "sisa": sisa_per_kategori}
-# --- FUNGSI EVALUASI SYARAT AKADEMIK LENGKAP DENGAN ALASAN ---
+# --- FUNGSI TAMPILKAN TANDA TANGAN ACC KAPROGDI (Disesuaikan persis dengan gambar) ---
+def tampilkan_ttd_kaprogdi(jenis_acc: str, tanggal_acc: str = "24/08/2026"):
+    """
+    Menampilkan blok Tanda Tangan ACC Kaprogdi persis sesuai sampel gambar:
+    - Text: ACC [KP/TTU 1/Review/Yudisium] (Tanggal)
+    - Core Core Tanda Tangan Hitam Presisi
+    - Nama Lengkap Kaprogdi Bergaris Bawah Tegas
+    - Jabatan Ketua Program Studi S1 Teknik Informatika
+    """
+    html_code = f"""
+    <div style="background-color: #ffffff; padding: 25px 35px; border-radius: 8px; color: #000000; width: fit-content; margin-top: 15px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+        <p style="font-family: Arial, sans-serif; font-size: 19px; font-weight: bold; margin: 0 0 10px 0; color: #000000; letter-spacing: 0.5px;">
+            ACC {jenis_acc} &nbsp;&nbsp;({tanggal_acc})
+        </p>
+        <div style="margin: 5px 0 10px -5px;">
+            <svg width="220" height="90" viewBox="0 0 220 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Tanda tangan presisi warna hitam menyamai dokumen fisik -->
+                <path d="M 15 50 C 15 15, 75 10, 75 35 C 75 60, 20 75, 45 70 C 65 65, 80 40, 70 30 C 65 25, 60 50, 75 60 C 80 40, 78 20, 80 15 L 80 62 C 80 62, 85 45, 90 40 C 95 35, 95 62, 100 62 C 105 45, 115 50, 115 62" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M 125 15 L 125 78 M 125 48 C 125 35, 142 30, 138 48 C 135 62, 115 75, 145 68 C 155 60, 160 38, 160 30 L 160 65" stroke="#000000" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M 105 60 L 175 52" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <p style="font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; text-decoration: underline; margin: 0; color: #000000;">
+            Dr. Indrastanti Ratna Widiasari, MT.
+        </p>
+        <p style="font-family: Arial, sans-serif; font-size: 15px; margin: 3px 0 0 0; color: #111111;">
+            Ketua Program Studi S1 Teknik Informatika
+        </p>
+    </div>
+    """
+    st.markdown(html_code, unsafe_allow_html=True)
+
+# --- FUNGSI EVALUASI SYARAT AKADEMIK LENGKAP DENGAN ALASAN & DATA ACC ---
 def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
     total_sks_lulus = 0
     list_nilai_huruf = []
     passed_mk_dict = {}
-    
-    # Penampung detail untuk pesan alasan
+   
     mk_d_atau_e = []
     mk_nilai_e = []
     mk_nilai_d = []
     sks_d = 0
-    
+   
     for mk in mk_list:
         nilai = str(mk.get("nilai", "-")).strip().upper()
         try:
@@ -463,13 +494,13 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
         nama = str(mk.get("nama_mk", "")).strip()
         kode = str(mk.get("kode", "")).strip()
         nama_lower = nama.lower()
-        
+       
         list_nilai_huruf.append(nilai)
         passed_mk_dict[nama_lower] = {"nilai": nilai, "kode": kode, "nama": nama, "sks": sks}
-        
+       
         if nilai not in ("E", "T", "-"):
             total_sks_lulus += sks
-            
+           
         if nilai in ("D", "D+"):
             mk_nilai_d.append(f"{nama} ({kode}) [Nilai: {nilai}]")
             mk_d_atau_e.append(f"{nama} ({kode}) [Nilai: {nilai}]")
@@ -480,21 +511,14 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
 
     pesan_rekomendasi = []
 
-    # 1. SYARAT KERJA PRAKTEK (KP)
-    mk_kp_syarat = [
-        "pendidikan agama",
-        "pancasila",
-        "kewarganegaraan",
-        "bahasa indonesia",
-        "metodologi penelitian"
-    ]
-    
+    # 1. EVALUASI SYARAT KERJA PRAKTEK (KP)
+    mk_kp_syarat = ["pendidikan agama", "pancasila", "kewarganegaraan", "bahasa indonesia", "metodologi penelitian"]
     mk_kp_belum_c = []
     for syarat in mk_kp_syarat:
         ditemukan_dan_lulus = False
         for nama_mk_lower, info in passed_mk_dict.items():
             if syarat in nama_mk_lower:
-                if BOBOT.get(info["nilai"], 0.0) >= 2.0:  # Nilai min C (Bobot >= 2.0)
+                if BOBOT.get(info["nilai"], 0.0) >= 2.0:
                     ditemukan_dan_lulus = True
                     break
                 else:
@@ -509,7 +533,7 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
     syarat_kp = syarat_kp_sks and syarat_kp_mk
 
     if syarat_kp:
-        pesan_rekomendasi.append("✅ Anda bisa daftar **Kerja Praktek (KP)**.")
+        pesan_rekomendasi.append({"status": True, "jenis": "KP", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **Kerja Praktek (KP)**."})
     else:
         alasan_kp = []
         if not syarat_kp_sks:
@@ -517,44 +541,45 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
         if not syarat_kp_mk:
             alasan_kp.append("Mata kuliah wajib KP berikut belum mencapai nilai minimal C:\n      - " + "\n      - ".join(mk_kp_belum_c))
         
-        pesan_rekomendasi.append(
-            "❌ **Belum memenuhi syarat KP (Min. 108 SKS & MK Wajib min C).**\n" +
-            "   *Alasan:*\n   * " + "\n   * ".join(alasan_kp)
-        )
+        pesan_rekomendasi.append({
+            "status": False,
+            "jenis": "KP",
+            "teks": "❌ **Belum memenuhi syarat KP (Min. 108 SKS & MK Wajib min C).**\n   *Alasan:*\n   * " + "\n   * ".join(alasan_kp)
+        })
 
-    # 2. SYARAT TUGAS TALENTA UNGGUL 1 (TTU 1)
+    # 2. EVALUASI SYARAT TUGAS TALENTA UNGGUL 1 (TTU 1)
     syarat_ttu1 = (total_sks_lulus >= 120)
     if syarat_ttu1:
-        pesan_rekomendasi.append("✅ Anda bisa daftar **TTU 1** (Min. 120 SKS).")
+        pesan_rekomendasi.append({"status": True, "jenis": "TTU 1", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **TTU 1** (Min. 120 SKS)."})
     else:
         kekurangan_sks_ttu1 = 120 - total_sks_lulus
-        pesan_rekomendasi.append(
-            f"❌ **Belum memenuhi syarat TTU 1 (< 120 SKS).**\n"
-            f"   *Alasan:* SKS Anda saat ini baru **{total_sks_lulus} SKS**, sehingga masih kurang **{kekurangan_sks_ttu1} SKS** dari batas minimal 120 SKS."
-        )
+        pesan_rekomendasi.append({
+            "status": False,
+            "jenis": "TTU 1",
+            "teks": f"❌ **Belum memenuhi syarat TTU 1 (< 120 SKS).**\n   *Alasan:* SKS Anda saat ini baru **{total_sks_lulus} SKS**, sehingga masih kurang **{kekurangan_sks_ttu1} SKS** dari batas minimal 120 SKS."
+        })
 
-    # 3. SYARAT REVIEW PROPOSAL
+    # 3. EVALUASI SYARAT REVIEW PROPOSAL
     syarat_review = len(mk_d_atau_e) == 0
     if syarat_review:
-        pesan_rekomendasi.append("✅ Anda bisa daftar **Review** (Tidak ada nilai D/E).")
+        pesan_rekomendasi.append({"status": True, "jenis": "Review Proposal", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **Review Proposal** (Tidak ada nilai D/E)."})
     else:
-        pesan_rekomendasi.append(
-            "❌ **Belum memenuhi syarat Review (Masih ada nilai D/E).**\n"
-            f"   *Alasan:* Terdapat **{len(mk_d_atau_e)} mata kuliah** yang bernilai D/E yang harus diperbaiki terlebih dahulu:\n"
-            "      - " + "\n      - ".join(mk_d_atau_e)
-        )
+        pesan_rekomendasi.append({
+            "status": False,
+            "jenis": "Review Proposal",
+            "teks": "❌ **Belum memenuhi syarat Review (Masih ada nilai D/E).**\n   *Alasan:* Terdapat **" + str(len(mk_d_atau_e)) + " mata kuliah** yang bernilai D/E yang harus diperbaiki terlebih dahulu:\n      - " + "\n      - ".join(mk_d_atau_e)
+        })
 
-    # 4. SYARAT YUDISIUM
+    # 4. EVALUASI SYARAT YUDISIUM
     jumlah_d = len(mk_nilai_d)
     ada_e = len(mk_nilai_e) > 0
     syarat_yudisium_sks = total_sks_lulus >= 144
     syarat_yudisium_d = (jumlah_d <= 3) and (sks_d <= 8)
     syarat_yudisium_e = not ada_e
-
     syarat_yudisium = syarat_yudisium_sks and syarat_yudisium_d and syarat_yudisium_e
 
     if syarat_yudisium:
-        pesan_rekomendasi.append("🎉 Selamat! Anda memenuhi syarat untuk mendaftar **Yudisium**.")
+        pesan_rekomendasi.append({"status": True, "jenis": "Yudisium", "teks": "🎉 Selamat! Anda memenuhi syarat untuk mendaftar **Yudisium**."})
     else:
         alasan_yudisium = []
         if not syarat_yudisium_sks:
@@ -564,10 +589,11 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
         if not syarat_yudisium_d:
             alasan_yudisium.append(f"Jumlah nilai D melebihi ketentuan (Maksimal 3 MK & total 8 SKS). Saat ini Anda memiliki **{jumlah_d} MK** bernilai D dengan total **{sks_d} SKS**:\n      - " + "\n      - ".join(mk_nilai_d))
 
-        pesan_rekomendasi.append(
-            "❌ **Belum memenuhi syarat Yudisium.**\n" +
-            "   *Alasan:*\n   * " + "\n   * ".join(alasan_yudisium)
-        )
+        pesan_rekomendasi.append({
+            "status": False,
+            "jenis": "Yudisium",
+            "teks": "❌ **Belum memenuhi syarat Yudisium.**\n   *Alasan:*\n   * " + "\n   * ".join(alasan_yudisium)
+        })
 
     return {
         "total_sks_lulus": total_sks_lulus,
@@ -707,17 +733,19 @@ if current_view == "HOME":
                     for item in ringkasan["detail"]:
                         st.markdown(f"- {item}")
                
-                # --- INTEGRASI STATUS KELAYAKAN PENDAFTARAN DENGAN DETAILED ALASAN ---
+                # --- HASIL EVALUASI DENGAN TANDA TANGAN ACC KAPROGDI ---
                 st.markdown("---")
-                st.markdown("### 🔍 Status Kelayakan Pendaftaran (KP, TTU, Review, Yudisium)")
+                st.markdown("### 🔍 Status Kelayakan Pendaftaran & Lembar ACC Kaprogdi")
                 eval_hasil = evaluasi_syarat_akademik(current_mk_list)
                 st.metric(label="Total SKS Diperoleh / Lulus", value=f"{eval_hasil['total_sks_lulus']} SKS")
                
-                for p in eval_hasil["pesan"]:
-                    if "✅" in p or "🎉" in p:
-                        st.success(p)
+                for item in eval_hasil["pesan"]:
+                    if item["status"]:
+                        st.success(item["teks"])
+                        # MENAMPILKAN TANDA TANGAN PERSIS SESUAI GAMBAR JIKA MEMENUHI SYARAT
+                        tampilkan_ttd_kaprogdi(jenis_acc=item["jenis"], tanggal_acc="24/08/2026")
                     else:
-                        st.warning(p)
+                        st.warning(item["teks"])
 
                 st.markdown("---")
                 col_s, col_d = st.columns(2)
