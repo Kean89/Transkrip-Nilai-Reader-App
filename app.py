@@ -407,48 +407,13 @@ def analisis_transkrip(file_bytes: bytes, ext: str) -> dict:
     if profil["ipk"] == "-" and mk:
         profil["ipk"] = hitung_ipk(mk) + " (dihitung otomatis)"
     return {"mahasiswa": profil, "mata_kuliah": mk, "raw_teks": teks}
-
-def buat_ringkasan_kurikulum(mk_list: list[dict], jurusan_pilih: str, peminatan_pilih: str) -> dict:
-    passed_codes = {m["kode"] for m in mk_list if str(m["nilai"]).upper() not in ("E", "T", "-")}
-    passed_names = {m["nama_mk"].lower() for m in mk_list if str(m["nilai"]).upper() not in ("E", "T", "-")}
-   
-    kategori_total = {}
-    kategori_lulus = {}
-    detail_status = []
-   
-    for kur in KURIKULUM_2026_DATA:
-        kat = kur["kategori"]
-       
-        if "Teknik Informatika" in jurusan_pilih or "IT" in jurusan_pilih.upper():
-            if "Data Science" in peminatan_pilih:
-                if "Konsentrasi Network" in kat or "Konsentrasi Software" in kat:
-                    continue
-            elif "Software" in peminatan_pilih:
-                if "Konsentrasi Network" in kat or "Konsentrasi Data Science" in kat:
-                    continue
-            elif "Network" in peminatan_pilih:
-                if "Konsentrasi Software" in kat or "Konsentrasi Data Science" in kat:
-                    continue
-                   
-        kategori_total[kat] = kategori_total.get(kat, 0) + 1
-       
-        matched = (kur["kode"] in passed_codes) or (kur["nama"].lower() in passed_names)
-        if matched:
-            kategori_lulus[kat] = kategori_lulus.get(kat, 0) + 1
-            val_nilai = next((m["nilai"] for m in mk_list if m["kode"] == kur["kode"] or m["nama_mk"].lower() == kur["nama"].lower()), "A")
-            detail_status.append(f"Mata kuliah **{kur['nama']}** ({kat}) lulus dengan nilai **{val_nilai}**")
-        else:
-            detail_status.append(f"Mata kuliah **{kur['nama']}** ({kat}) belum lulus / belum diambil")
-           
-    sisa_per_kategori = {kat: kategori_total[kat] - kategori_lulus.get(kat, 0) for kat in kategori_total}
-    return {"detail": detail_status, "sisa": sisa_per_kategori}
-# --- FUNGSI TAMPILKAN TANDA TANGAN ACC KAPROGDI (Disesuaikan persis dengan gambar) ---
+# --- FUNGSI TAMPILKAN TANDA TANGAN ACC KAPROGDI ---
 def tampilkan_ttd_kaprogdi(jenis_acc: str, tanggal_acc: str = "24/08/2026"):
     """
-    Menampilkan blok Tanda Tangan ACC Kaprogdi persis sesuai sampel gambar:
+    Menampilkan Tanda Tangan ACC Kaprogdi persis sampel gambar:
     - Text: ACC [KP/TTU 1/Review/Yudisium] (Tanggal)
-    - Core Core Tanda Tangan Hitam Presisi
-    - Nama Lengkap Kaprogdi Bergaris Bawah Tegas
+    - Coretan Tanda Tangan Hitam Presisi
+    - Nama Lengkap Kaprogdi Bergaris Bawah
     - Jabatan Ketua Program Studi S1 Teknik Informatika
     """
     html_code = f"""
@@ -458,7 +423,7 @@ def tampilkan_ttd_kaprogdi(jenis_acc: str, tanggal_acc: str = "24/08/2026"):
         </p>
         <div style="margin: 5px 0 10px -5px;">
             <svg width="220" height="90" viewBox="0 0 220 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- Tanda tangan presisi warna hitam menyamai dokumen fisik -->
+                <!-- SVG Tanda Tangan Hitam Presisi -->
                 <path d="M 15 50 C 15 15, 75 10, 75 35 C 75 60, 20 75, 45 70 C 65 65, 80 40, 70 30 C 65 25, 60 50, 75 60 C 80 40, 78 20, 80 15 L 80 62 C 80 62, 85 45, 90 40 C 95 35, 95 62, 100 62 C 105 45, 115 50, 115 62" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                 <path d="M 125 15 L 125 78 M 125 48 C 125 35, 142 30, 138 48 C 135 62, 115 75, 145 68 C 155 60, 160 38, 160 30 L 160 65" stroke="#000000" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                 <path d="M 105 60 L 175 52" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
@@ -474,8 +439,8 @@ def tampilkan_ttd_kaprogdi(jenis_acc: str, tanggal_acc: str = "24/08/2026"):
     """
     st.markdown(html_code, unsafe_allow_html=True)
 
-# --- FUNGSI EVALUASI SYARAT AKADEMIK LENGKAP DENGAN ALASAN & DATA ACC ---
-def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
+# --- FUNGSI EVALUASI SYARAT AKADEMIK HANYA SPESIFIK KEPERLUAN YANG DIPILIH ---
+def evaluasi_syarat_spesifik(mk_list: list[dict], keperluan: str) -> dict:
     total_sks_lulus = 0
     list_nilai_huruf = []
     passed_mk_dict = {}
@@ -509,99 +474,89 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
             mk_nilai_e.append(f"{nama} ({kode}) [Nilai: {nilai}]")
             mk_d_atau_e.append(f"{nama} ({kode}) [Nilai: {nilai}]")
 
-    pesan_rekomendasi = []
+    is_lulus = False
+    pesan = ""
+    label_acc = ""
 
-    # 1. EVALUASI SYARAT KERJA PRAKTEK (KP)
-    mk_kp_syarat = ["pendidikan agama", "pancasila", "kewarganegaraan", "bahasa indonesia", "metodologi penelitian"]
-    mk_kp_belum_c = []
-    for syarat in mk_kp_syarat:
-        ditemukan_dan_lulus = False
-        for nama_mk_lower, info in passed_mk_dict.items():
-            if syarat in nama_mk_lower:
-                if BOBOT.get(info["nilai"], 0.0) >= 2.0:
-                    ditemukan_dan_lulus = True
-                    break
-                else:
-                    mk_kp_belum_c.append(f"{info['nama']} ({info['kode']}) - Nilai: {info['nilai']}")
-                    ditemukan_dan_lulus = True
-                    break
-        if not ditemukan_dan_lulus:
-            mk_kp_belum_c.append(f"{syarat.title()} (Belum diambil / Tidak ditemukan)")
+    # 1. EVALUASI KHUSUS KERJA PRAKTEK (KP)
+    if keperluan == "KP":
+        label_acc = "KP"
+        mk_kp_syarat = ["pendidikan agama", "pancasila", "kewarganegaraan", "bahasa indonesia", "metodologi penelitian"]
+        mk_kp_belum_c = []
+        for syarat in mk_kp_syarat:
+            ditemukan_dan_lulus = False
+            for nama_mk_lower, info in passed_mk_dict.items():
+                if syarat in nama_mk_lower:
+                    if BOBOT.get(info["nilai"], 0.0) >= 2.0:
+                        ditemukan_dan_lulus = True
+                        break
+                    else:
+                        mk_kp_belum_c.append(f"{info['nama']} ({info['kode']}) - Nilai: {info['nilai']}")
+                        ditemukan_dan_lulus = True
+                        break
+            if not ditemukan_dan_lulus:
+                mk_kp_belum_c.append(f"{syarat.title()} (Belum diambil / Tidak ditemukan)")
 
-    syarat_kp_sks = total_sks_lulus >= 108
-    syarat_kp_mk = len(mk_kp_belum_c) == 0
-    syarat_kp = syarat_kp_sks and syarat_kp_mk
+        syarat_sks = total_sks_lulus >= 108
+        syarat_mk = len(mk_kp_belum_c) == 0
+        is_lulus = syarat_sks and syarat_mk
 
-    if syarat_kp:
-        pesan_rekomendasi.append({"status": True, "jenis": "KP", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **Kerja Praktek (KP)**."})
-    else:
-        alasan_kp = []
-        if not syarat_kp_sks:
-            alasan_kp.append(f"Total SKS lulus baru **{total_sks_lulus} SKS** (Kurang {108 - total_sks_lulus} SKS dari syarat minimal 108 SKS).")
-        if not syarat_kp_mk:
-            alasan_kp.append("Mata kuliah wajib KP berikut belum mencapai nilai minimal C:\n      - " + "\n      - ".join(mk_kp_belum_c))
-        
-        pesan_rekomendasi.append({
-            "status": False,
-            "jenis": "KP",
-            "teks": "❌ **Belum memenuhi syarat KP (Min. 108 SKS & MK Wajib min C).**\n   *Alasan:*\n   * " + "\n   * ".join(alasan_kp)
-        })
+        if is_lulus:
+            pesan = "✅ Selamat! Anda memenuhi syarat untuk mendaftar **Kerja Praktek (KP)**."
+        else:
+            alasan = []
+            if not syarat_sks:
+                alasan.append(f"Total SKS lulus Anda baru **{total_sks_lulus} SKS** (Kurang {108 - total_sks_lulus} SKS dari syarat minimal 108 SKS).")
+            if not syarat_mk:
+                alasan.append("Mata kuliah wajib KP berikut belum mencapai nilai minimal C:\n      - " + "\n      - ".join(mk_kp_belum_c))
+            pesan = "❌ **Belum memenuhi syarat KP (Min. 108 SKS & MK Wajib min C).**\n   *Alasan:*\n   * " + "\n   * ".join(alasan)
 
-    # 2. EVALUASI SYARAT TUGAS TALENTA UNGGUL 1 (TTU 1)
-    syarat_ttu1 = (total_sks_lulus >= 120)
-    if syarat_ttu1:
-        pesan_rekomendasi.append({"status": True, "jenis": "TTU 1", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **TTU 1** (Min. 120 SKS)."})
-    else:
-        kekurangan_sks_ttu1 = 120 - total_sks_lulus
-        pesan_rekomendasi.append({
-            "status": False,
-            "jenis": "TTU 1",
-            "teks": f"❌ **Belum memenuhi syarat TTU 1 (< 120 SKS).**\n   *Alasan:* SKS Anda saat ini baru **{total_sks_lulus} SKS**, sehingga masih kurang **{kekurangan_sks_ttu1} SKS** dari batas minimal 120 SKS."
-        })
+    # 2. EVALUASI KHUSUS REVIEW PROPOSAL
+    elif keperluan == "Review":
+        label_acc = "Review Proposal"
+        is_lulus = (len(mk_d_atau_e) == 0)
+        if is_lulus:
+            pesan = "✅ Selamat! Anda memenuhi syarat untuk mendaftar **Review Proposal** (Tidak ada nilai D/E)."
+        else:
+            pesan = f"❌ **Belum memenuhi syarat Review (Masih ada nilai D/E).**\n   *Alasan:* Terdapat **{len(mk_d_atau_e)} mata kuliah** bernilai D/E yang harus diperbaiki terlebih dahulu:\n      - " + "\n      - ".join(mk_d_atau_e)
 
-    # 3. EVALUASI SYARAT REVIEW PROPOSAL
-    syarat_review = len(mk_d_atau_e) == 0
-    if syarat_review:
-        pesan_rekomendasi.append({"status": True, "jenis": "Review Proposal", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **Review Proposal** (Tidak ada nilai D/E)."})
-    else:
-        pesan_rekomendasi.append({
-            "status": False,
-            "jenis": "Review Proposal",
-            "teks": "❌ **Belum memenuhi syarat Review (Masih ada nilai D/E).**\n   *Alasan:* Terdapat **" + str(len(mk_d_atau_e)) + " mata kuliah** yang bernilai D/E yang harus diperbaiki terlebih dahulu:\n      - " + "\n      - ".join(mk_d_atau_e)
-        })
+    # 3. EVALUASI KHUSUS TTU (TUGAS TALENTA UNGGUL 1)
+    elif keperluan == "TTU":
+        label_acc = "TTU 1"
+        is_lulus = (total_sks_lulus >= 120)
+        if is_lulus:
+            pesan = "✅ Selamat! Anda memenuhi syarat SKS untuk mendaftar **TTU 1** (Minimal 120 SKS)."
+        else:
+            kekurangan = 120 - total_sks_lulus
+            pesan = f"❌ **Belum memenuhi syarat TTU 1 (< 120 SKS).**\n   *Alasan:* SKS lulus Anda saat ini baru **{total_sks_lulus} SKS**, sehingga masih kurang **{kekurangan} SKS** dari batas minimal 120 SKS."
 
-    # 4. EVALUASI SYARAT YUDISIUM
-    jumlah_d = len(mk_nilai_d)
-    ada_e = len(mk_nilai_e) > 0
-    syarat_yudisium_sks = total_sks_lulus >= 144
-    syarat_yudisium_d = (jumlah_d <= 3) and (sks_d <= 8)
-    syarat_yudisium_e = not ada_e
-    syarat_yudisium = syarat_yudisium_sks and syarat_yudisium_d and syarat_yudisium_e
+    # 4. EVALUASI KHUSUS YUDISIUM
+    elif keperluan == "Yudisium":
+        label_acc = "Yudisium"
+        jumlah_d = len(mk_nilai_d)
+        ada_e = len(mk_nilai_e) > 0
+        syarat_sks = total_sks_lulus >= 144
+        syarat_d = (jumlah_d <= 3) and (sks_d <= 8)
+        syarat_e = not ada_e
+        is_lulus = syarat_sks and syarat_d and syarat_e
 
-    if syarat_yudisium:
-        pesan_rekomendasi.append({"status": True, "jenis": "Yudisium", "teks": "🎉 Selamat! Anda memenuhi syarat untuk mendaftar **Yudisium**."})
-    else:
-        alasan_yudisium = []
-        if not syarat_yudisium_sks:
-            alasan_yudisium.append(f"Total SKS lulus baru **{total_sks_lulus} SKS** (Kurang {144 - total_sks_lulus} SKS dari syarat minimal 144 SKS).")
-        if ada_e:
-            alasan_yudisium.append(f"Masih terdapat nilai E/T pada mata kuliah berikut:\n      - " + "\n      - ".join(mk_nilai_e))
-        if not syarat_yudisium_d:
-            alasan_yudisium.append(f"Jumlah nilai D melebihi ketentuan (Maksimal 3 MK & total 8 SKS). Saat ini Anda memiliki **{jumlah_d} MK** bernilai D dengan total **{sks_d} SKS**:\n      - " + "\n      - ".join(mk_nilai_d))
-
-        pesan_rekomendasi.append({
-            "status": False,
-            "jenis": "Yudisium",
-            "teks": "❌ **Belum memenuhi syarat Yudisium.**\n   *Alasan:*\n   * " + "\n   * ".join(alasan_yudisium)
-        })
+        if is_lulus:
+            pesan = "🎉 Selamat! Anda memenuhi kelayakan untuk mendaftar **Yudisium**."
+        else:
+            alasan = []
+            if not syarat_sks:
+                alasan.append(f"Total SKS lulus baru **{total_sks_lulus} SKS** (Kurang {144 - total_sks_lulus} SKS dari syarat minimal 144 SKS).")
+            if ada_e:
+                alasan.append(f"Masih terdapat nilai E/T pada mata kuliah berikut:\n      - " + "\n      - ".join(mk_nilai_e))
+            if not syarat_d:
+                alasan.append(f"Jumlah nilai D melebihi ketentuan (Maksimal 3 MK & total 8 SKS). Saat ini Anda memiliki **{jumlah_d} MK** bernilai D dengan total **{sks_d} SKS**:\n      - " + "\n      - ".join(mk_nilai_d))
+            pesan = "❌ **Belum memenuhi syarat Yudisium.**\n   *Alasan:*\n   * " + "\n   * ".join(alasan)
 
     return {
         "total_sks_lulus": total_sks_lulus,
-        "syarat_kp": syarat_kp,
-        "syarat_ttu1": syarat_ttu1,
-        "syarat_review": syarat_review,
-        "syarat_yudisium": syarat_yudisium,
-        "pesan": pesan_rekomendasi
+        "is_lulus": is_lulus,
+        "pesan": pesan,
+        "label_acc": label_acc
     }
     # --- SIDEBAR & NAVIGASI UTAMA ---
 with st.sidebar:
@@ -617,9 +572,8 @@ with st.sidebar:
     st.markdown("### 📌 Petunjuk Penggunaan")
     st.markdown("""
     1. Unggah transkrip nilai (**PDF**, **PNG**, **JPG**, **JPEG**).
-    2. Sistem membaca dokumen **secara otomatis**.
-    3. Pilih Jurusan dan Peminatan Anda.
-    4. Periksa sisa mata kuliah dan kelayakan pendaftaran.
+    2. Pilih **Keperluan Pengajuan** Anda.
+    3. Periksa status memenuhi/tidak memenuhi syarat khusus keperluan tersebut & **Tanda Tangan ACC**.
     """)
     st.markdown("---")
     st.caption("Dibuat dengan ❤️ menggunakan Streamlit")
@@ -647,8 +601,8 @@ current_view = st.session_state.get("active_view", "HOME")
 
 # --- HALAMAN HOME ---
 if current_view == "HOME":
-    st.title("Transkrip Nilai Reader & Analisis Kurikulum")
-    st.markdown("Ekstrak data mahasiswa dan pantau sisa mata kuliah berdasarkan Jurusan & Peminatan secara otomatis.")
+    st.title("Transkrip Nilai Reader & Evaluasi Akademik")
+    st.markdown("Ekstrak data transkrip nilai dan periksa kelayakan pendaftaran secara instan.")
     st.markdown("---")
    
     uploaded_file = st.file_uploader(
@@ -660,112 +614,106 @@ if current_view == "HOME":
         ext = uploaded_file.name.split(".")[-1].lower()
         file_bytes = uploaded_file.getvalue()
        
-        with st.spinner("🔄 Membaca file secara otomatis..."):
-            try:
-                st.session_state["hasil_analisis"] = analisis_transkrip(file_bytes, ext)
-                st.session_state["analisis_id"] += 1
-            except Exception as e:
-                st.error(f"❌ Terjadi kesalahan saat memproses dokumen: {e}")
-               
-        col_preview, col_result = st.columns([1, 1.2], gap="large")
-        with col_preview:
-            st.markdown("### 📄 Preview Dokumen")
-            if ext in ("png", "jpg", "jpeg"):
-                st.image(Image.open(io.BytesIO(file_bytes)), caption=f"File: {uploaded_file.name}", use_container_width=True)
-            else:
-                st.success(f"📄 File PDF berhasil diunggah: **{uploaded_file.name}**")
-               
-        with col_result:
-            st.markdown("### ⚙️ Hasil Analisis Otomatis")
-            hasil = st.session_state.get("hasil_analisis")
-            if hasil:
-                aid = st.session_state["analisis_id"]
-                mhs = hasil["mahasiswa"]
-                st.markdown("---")
-               
-                with st.expander("🔍 Lihat Teks Mentah yang Terbaca (Debug OCR)"):
-                    st.text(hasil.get("raw_teks", "Tidak ada teks."))
-                if not hasil["mata_kuliah"]:
-                    st.warning("⚠️ Tidak ada mata kuliah yang terdeteksi otomatis. Silakan lengkapi baris secara manual pada tabel di bawah.")
-                else:
-                    st.success(f"✨ Ekstraksi selesai: {len(hasil['mata_kuliah'])} mata kuliah terdeteksi.")
-               
-                st.markdown("#### 👤 Profil Mahasiswa & Pengaturan Jurusan/Minat")
-                c1, c2 = st.columns(2)
-                with c1:
-                    nama_v = st.text_input("Nama", mhs["nama"], key=f"p_nama_{aid}")
-                    nim_v = st.text_input("NIM", mhs["nim"], key=f"p_nim_{aid}")
-                    jur_v = st.text_input("Jurusan", mhs["jurusan"] if mhs["jurusan"] != "-" else "S1 Teknik Informatika", key=f"p_jur_{aid}")
-                with c2:
-                    uni_v = st.text_input("Universitas", mhs["universitas"], key=f"p_uni_{aid}")
-                    ipk_v = st.text_input("IPK Kumulatif", mhs["ipk"], key=f"p_ipk_{aid}")
-                   
-                peminatan_pilih = st.selectbox(
-                    "🎯 Pilih Peminatan / Konsentrasi Studi",
-                    ["Data Science", "Software Engineering", "Network Engineering", "Umum / Belum Pilih"],
-                    key=f"peminatan_{aid}"
-                )
-               
-                st.markdown("#### 📚 Daftar Mata Kuliah (bisa diedit)")
-                df = pd.DataFrame(hasil["mata_kuliah"], columns=["kode", "nama_mk", "sks", "nilai"])
-                df.columns = ["Kode MK", "Nama Mata Kuliah", "SKS", "Nilai"]
-                df_edit = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True, key=f"editor_{aid}")
-               
-                st.markdown("---")
-                st.markdown(f"### 📊 Ringkasan Nilai & Sisa Mata Kuliah ({jur_v} - {peminatan_pilih})")
-               
-                current_mk_list = [
-                    {"kode": str(r["Kode MK"]), "nama_mk": str(r["Nama Mata Kuliah"]), "sks": str(r["SKS"]), "nilai": str(r["Nilai"])}
-                    for _, r in df_edit.iterrows()
-                ]
-               
-                ringkasan = buat_ringkasan_kurikulum(current_mk_list, jur_v, peminatan_pilih)
-               
-                st.markdown("#### 📌 Sisa Mata Kuliah yang Harus Diambil per Kategori:")
-                col_sisa1, col_sisa2 = st.columns(2)
-                idx = 0
-                for kat, sisa in ringkasan["sisa"].items():
-                    target_col = col_sisa1 if idx % 2 == 0 else col_sisa2
-                    target_col.metric(label=kat, value=f"Sisa {sisa} MK")
-                    idx += 1
-               
-                with st.expander("📝 Lihat Detail Status Mata Kuliah Lulus/Belum"):
-                    for item in ringkasan["detail"]:
-                        st.markdown(f"- {item}")
-               
-                # --- HASIL EVALUASI DENGAN TANDA TANGAN ACC KAPROGDI ---
-                st.markdown("---")
-                st.markdown("### 🔍 Status Kelayakan Pendaftaran & Lembar ACC Kaprogdi")
-                eval_hasil = evaluasi_syarat_akademik(current_mk_list)
-                st.metric(label="Total SKS Diperoleh / Lulus", value=f"{eval_hasil['total_sks_lulus']} SKS")
-               
-                for item in eval_hasil["pesan"]:
-                    if item["status"]:
-                        st.success(item["teks"])
-                        # MENAMPILKAN TANDA TANGAN PERSIS SESUAI GAMBAR JIKA MEMENUHI SYARAT
-                        tampilkan_ttd_kaprogdi(jenis_acc=item["jenis"], tanggal_acc="24/08/2026")
-                    else:
-                        st.warning(item["teks"])
+        # 1. PILIHAN KEPERLUAN MUNCUL DULUAN SETELAH UPLOAD FILE (SEBELUM MEMPROSES HASIL)
+        st.markdown("---")
+        keperluan_pilihan = st.selectbox(
+            "📌 Pilih Keperluan Pengajuan Akademik Anda:",
+            [
+                "-- Pilih Keperluan Pengajuan --",
+                "KP",
+                "Review",
+                "TTU",
+                "Yudisium"
+            ],
+            key="pilihan_keperluan_utama"
+        )
 
-                st.markdown("---")
-                col_s, col_d = st.columns(2)
-                with col_s:
-                    if st.button("💾 Simpan ke Database", key="btn_simpan_transkrip"):
-                        profil = {"nama": nama_v, "nim": nim_v, "jurusan": jur_v, "universitas": uni_v, "ipk": ipk_v}
-                        if simpan_ke_database(profil, current_mk_list):
-                            st.success("💾 Data berhasil disimpan ke database lokal!")
-                with col_d:
-                    st.download_button(
-                        "📥 Unduh Data Mata Kuliah (.CSV)",
-                        data=df_edit.to_csv(index=False).encode("utf-8"),
-                        file_name="transkrip_extracted.csv",
-                        mime="text/csv",
+        # 2. HASIL DAN KELAYAKAN HANYA MUNCUL APABILA PENGGUNA SUDAH MEMILIH KEPERLUAN
+        if keperluan_pilihan != "-- Pilih Keperluan Pengajuan --":
+            with st.spinner("🔄 Membaca dan menganalisis transkrip nilai..."):
+                try:
+                    st.session_state["hasil_analisis"] = analisis_transkrip(file_bytes, ext)
+                    st.session_state["analisis_id"] += 1
+                except Exception as e:
+                    st.error(f"❌ Terjadi kesalahan saat memproses dokumen: {e}")
+                   
+            col_preview, col_result = st.columns([1, 1.2], gap="large")
+            with col_preview:
+                st.markdown("### 📄 Preview Dokumen")
+                if ext in ("png", "jpg", "jpeg"):
+                    st.image(Image.open(io.BytesIO(file_bytes)), caption=f"File: {uploaded_file.name}", use_container_width=True)
+                else:
+                    st.success(f"📄 File PDF berhasil diunggah: **{uploaded_file.name}**")
+                   
+            with col_result:
+                hasil = st.session_state.get("hasil_analisis")
+                if hasil:
+                    aid = st.session_state["analisis_id"]
+                    mhs = hasil["mahasiswa"]
+                   
+                    st.markdown("### 👤 Profil Mahasiswa & Peminatan")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        nama_v = st.text_input("Nama", mhs["nama"], key=f"p_nama_{aid}")
+                        nim_v = st.text_input("NIM", mhs["nim"], key=f"p_nim_{aid}")
+                        jur_v = st.text_input("Jurusan", mhs["jurusan"] if mhs["jurusan"] != "-" else "S1 Teknik Informatika", key=f"p_jur_{aid}")
+                    with c2:
+                        uni_v = st.text_input("Universitas", mhs["universitas"], key=f"p_uni_{aid}")
+                        ipk_v = st.text_input("IPK Kumulatif", mhs["ipk"], key=f"p_ipk_{aid}")
+                       
+                    peminatan_pilih = st.selectbox(
+                        "🎯 Pilih Peminatan / Konsentrasi Studi",
+                        ["Data Science", "Software Engineering", "Network Engineering", "Umum / Belum Pilih"],
+                        key=f"peminatan_{aid}"
                     )
+                   
+                    st.markdown("#### 📚 Daftar Mata Kuliah (bisa diedit)")
+                    df = pd.DataFrame(hasil["mata_kuliah"], columns=["kode", "nama_mk", "sks", "nilai"])
+                    df.columns = ["Kode MK", "Nama Mata Kuliah", "SKS", "Nilai"]
+                    df_edit = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True, key=f"editor_{aid}")
+                   
+                    current_mk_list = [
+                        {"kode": str(r["Kode MK"]), "nama_mk": str(r["Nama Mata Kuliah"]), "sks": str(r["SKS"]), "nilai": str(r["Nilai"])}
+                        for _, r in df_edit.iterrows()
+                    ]
+                   
+                    # --- EVALUASI KHUSUS UNTUK KEPERLUAN YANG DIPILIH SAJA ---
+                    st.markdown("---")
+                    st.markdown(f"### 🔍 Hasil Evaluasi Kelayakan: Keperluan {keperluan_pilihan}")
+                   
+                    hasil_eval = evaluasi_syarat_spesifik(current_mk_list, keperluan_pilihan)
+                    st.metric(label="Total SKS Diperoleh / Lulus", value=f"{hasil_eval['total_sks_lulus']} SKS")
+                   
+                    if hasil_eval["is_lulus"]:
+                        st.success(hasil_eval["pesan"])
+                        # JIKA MEMENUHI SYARAT -> TANDA TANGAN KAPROGDI MUNCUL
+                        tampilkan_ttd_kaprogdi(jenis_acc=hasil_eval["label_acc"], tanggal_acc="24/08/2026")
+                    else:
+                        st.warning(hasil_eval["pesan"])
+                        # JIKA TIDAK MEMENUHI SYARAT -> TANDA TANGAN TIDAK MUNCUL
+                        st.error("🔒 Tanda tangan ACC Kaprogdi belum dapat diterbitkan karena syarat belum terpenuhi.")
+
+                    st.markdown("---")
+                    col_s, col_d = st.columns(2)
+                    with col_s:
+                        if st.button("💾 Simpan ke Database", key="btn_simpan_transkrip"):
+                            profil = {"nama": nama_v, "nim": nim_v, "jurusan": jur_v, "universitas": uni_v, "ipk": ipk_v}
+                            if simpan_ke_database(profil, current_mk_list):
+                                st.success("💾 Data berhasil disimpan ke database lokal!")
+                    with col_d:
+                        st.download_button(
+                            "📥 Unduh Data Mata Kuliah (.CSV)",
+                            data=df_edit.to_csv(index=False).encode("utf-8"),
+                            file_name="transkrip_extracted.csv",
+                            mime="text/csv",
+                        )
+        else:
+            st.info("💡 **Silakan pilih Keperluan Pengajuan Akademik Anda di atas terlebih dahulu untuk melihat hasil evaluasi dan tanda tangan.**")
 
 # --- HALAMAN KURIKULUM ---
 elif current_view == "KURIKULUM":
     st.title("📚 Daftar Kurikulum 2026")
-    st.markdown("Berikut adalah daftar alir Kurikulum S1 Teknik Informatika tahun 2026 yang terhubung dengan sistem database:")
+    st.markdown("Berikut adalah daftar alir Kurikulum S1 Teknik Informatika tahun 2026:")
    
     conn = sqlite3.connect(DB_PATH)
     df_kur = pd.read_sql_query("SELECT kode_mk AS 'Kode MK', nama_mk AS 'Nama Mata Kuliah', sks AS 'SKS', kategori AS 'Kategori' FROM kurikulum_2026", conn)
@@ -785,78 +733,52 @@ elif current_view == "KURIKULUM":
             filtered_df["Nama Mata Kuliah"].str.contains(search_query, case=False, na=False)
         ]
     st.dataframe(filtered_df, use_container_width=True, hide_index=True)
-    st.info(f"Total Mata Kuliah Ditampilkan: {len(filtered_df)} MK")
 
 # --- HALAMAN TTU ---
 elif current_view == "TTU":
     st.title("🏆 Tugas Talenta Unggul (TTU) & Review")
-    st.markdown("Kelola pendaftaran Tugas Talenta Unggul, Review Proposal, dan Yudisium.")
-   
     tab1, tab2, tab3, tab4 = st.tabs(["Pendaftaran TTU", "Review Proposal", "Yudisium", "Sarasehan Magang"])
    
     with tab1:
         st.subheader("Form Pendaftaran TTU 1")
-        st.info("ℹ️ **Syarat TTU 1:** Sudah mengambil minimal 120 SKS dan MK Wajib sudah diambil & lulus.")
         with st.form("form_pendaftaran_ttu"):
-            c1, c2 = st.columns(2)
-            with c1:
-                t_nim = st.text_input("NIM", value=USER_NIM)
-                t_nama = st.text_input("Nama Mahasiswa", value=USER_NAMA)
-                t_prodi = st.text_input("Program Studi", value="S1 Teknik Informatika")
-            with c2:
-                t_peminatan = st.selectbox("Peminatan", ["Data Science", "Software Engineering", "Network Engineering"])
-                t_status = st.selectbox("Status", ["Aktif", "Cuti"])
-           
-            ttu_pilih = st.multiselect(
-                "Pilih Mata Kuliah TTU",
-                ["TC851 - Tugas Talenta Unggul 1", "TC852 - Tugas Talenta Unggul 2", "TC853 - Tugas Talenta Unggul 3"]
-            )
+            t_nim = st.text_input("NIM", value=USER_NIM)
+            t_nama = st.text_input("Nama Mahasiswa", value=USER_NAMA)
+            t_prodi = st.text_input("Program Studi", value="S1 Teknik Informatika")
+            t_peminatan = st.selectbox("Peminatan", ["Data Science", "Software Engineering", "Network Engineering"])
+            t_status = st.selectbox("Status", ["Aktif", "Cuti"])
+            ttu_pilih = st.multiselect("Pilih Mata Kuliah TTU", ["TC851 - Tugas Talenta Unggul 1", "TC852 - Tugas Talenta Unggul 2", "TC853 - Tugas Talenta Unggul 3"])
             t_judul = st.text_area("Judul Proposal / Tugas Talenta Unggul")
-           
-            c3, c4 = st.columns(2)
-            with c3:
-                t_pemb1 = st.text_input("Pembimbing 1")
-            with c4:
-                t_pemb2 = st.text_input("Pembimbing 2")
-               
-            submitted_ttu = st.form_submit_button("Daftar TTU")
-            if submitted_ttu:
+            t_pemb1 = st.text_input("Pembimbing 1")
+            t_pemb2 = st.text_input("Pembimbing 2")
+            if st.form_submit_button("Daftar TTU"):
                 if simpan_ttu(t_nim, t_nama, t_prodi, t_peminatan, ttu_pilih, t_status, t_judul, t_pemb1, t_pemb2):
                     st.success("✅ Pendaftaran TTU berhasil disimpan!")
                    
     with tab2:
         st.subheader("Pendaftaran Review Proposal")
-        st.info("ℹ️ **Syarat Review:** Tidak ada nilai D/E dan sedang mengambil TTU 2 dan atau TTU 3.")
         with st.form("form_pendaftaran_review"):
             r_nim = st.text_input("NIM", value=USER_NIM)
             r_nama = st.text_input("Nama Mahasiswa", value=USER_NAMA)
             r_prodi = st.text_input("Program Studi", value="S1 Teknik Informatika")
             r_peminatan = st.selectbox("Peminatan Review", ["Data Science", "Software Engineering", "Network Engineering"])
             r_judul = st.text_area("Judul Proposal untuk Review")
-           
-            rc1, rc2 = st.columns(2)
-            with rc1:
-                r_pemb1 = st.text_input("Pembimbing 1 (Review)")
-                r_rev1 = st.text_input("Reviewer 1")
-            with rc2:
-                r_pemb2 = st.text_input("Pembimbing 2 (Review)")
-                r_rev2 = st.text_input("Reviewer 2")
-               
-            submitted_review = st.form_submit_button("Daftar Review")
-            if submitted_review:
+            r_pemb1 = st.text_input("Pembimbing 1")
+            r_pemb2 = st.text_input("Pembimbing 2")
+            r_rev1 = st.text_input("Reviewer 1")
+            r_rev2 = st.text_input("Reviewer 2")
+            if st.form_submit_button("Daftar Review"):
                 if simpan_review(r_nim, r_nama, r_prodi, r_peminatan, r_judul, r_pemb1, r_pemb2, r_rev1, r_rev2):
                     st.success("✅ Pendaftaran Review berhasil disimpan!")
 
     with tab3:
         st.subheader("Pendaftaran Yudisium")
-        st.info("ℹ️ **Syarat Yudisium:** Minimal total SKS 144, tidak ada nilai E, boleh ada nilai D maksimal 3 MK dengan total 8 SKS, mata kuliah wajib minimal C, sudah ambil KP dan LKP, serta sudah ada TTU 1, TTU 2, dan TTU 3.")
         if st.button("Ajukan Pendaftaran Yudisium"):
             if simpan_yudisium():
                 st.success("🎉 Pendaftaran Yudisium berhasil diajukan!")
 
     with tab4:
         st.subheader("Pendaftaran Sarasehan Magang")
-        st.markdown("Status pendaftaran orientasi Sarasehan Magang.")
         if not st.session_state["sarasehan_registered"]:
             if st.button("Daftar Sarasehan Magang"):
                 if simpan_sarasehan("Terdaftar"):
@@ -868,20 +790,15 @@ elif current_view == "TTU":
 # --- HALAMAN KP ---
 elif current_view == "KP":
     st.title("💼 Kerja Praktek (KP)")
-    st.markdown("Kelola permohonan surat dan pendaftaran Kerja Praktek Anda.")
-   
     tab_kp1, tab_kp2 = st.tabs(["Permohonan Surat KP", "Pendaftaran KP"])
    
     with tab_kp1:
         st.subheader("Form Permohonan Surat Pengantar KP")
-        st.info("ℹ️ **Syarat KP:** Sudah mengambil 108 SKS serta mengambil MK Pendidikan Agama, Pancasila, Kewarganegaraan, Bahasa Indonesia, dan Metodologi Penelitian dengan nilai minimal C.")
         with st.form("form_surat_kp"):
             instansi = st.text_input("Nama Instansi / Perusahaan")
             alamat = st.text_area("Alamat Instansi")
             ditujukan = st.text_input("Surat Ditujukan Kepada (Cth: HRD Manager)")
-           
-            submitted_surat = st.form_submit_button("Ajukan Surat Permohonan")
-            if submitted_surat:
+            if st.form_submit_button("Ajukan Surat Permohonan"):
                 if simpan_surat_kp(instansi, alamat, ditujukan):
                     st.success("✅ Permohonan surat KP berhasil diajukan!")
                    
@@ -892,8 +809,6 @@ elif current_view == "KP":
             kp_nama = st.text_input("Nama", value=USER_NAMA)
             kp_mk = st.multiselect("Mata Kuliah KP yang Diambil", ["TC821 - Kerja Praktek (5 SKS)", "TC822 - Laporan Kerja Praktek (5 SKS)"])
             kp_tempat = st.text_input("Tempat / Perusahaan KP")
-           
-            submitted_kp = st.form_submit_button("Daftar Kerja Praktek")
-            if submitted_kp:
+            if st.form_submit_button("Daftar Kerja Praktek"):
                 if simpan_kp(kp_nim, kp_nama, kp_mk, kp_tempat):
                     st.success("✅ Pendaftaran Kerja Praktek berhasil disimpan!")
