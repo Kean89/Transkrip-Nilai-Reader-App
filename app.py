@@ -343,16 +343,13 @@ def parse_profil(teks: str) -> dict:
 def parse_matakuliah_pro(teks: str, tables: list) -> list[dict]:
     hasil = []
     seen = set()
-
     pola_uksw = re.compile(
         r"(\d+)\.\s+([A-Z0-9\s\(\)\-\/&.,']+?)\s+([A-Z]{2,4}\d{3})\s+(\d)\s+\d/\d{2}\s+(AB|A-|A|B\+|B-|BC|B|C\+|C|D\+|D|E|T)\s+\d+(?:\.\d+)?"
     )
-
     semua_sumber = [teks]
     if tables:
         for row in tables:
             semua_sumber.append(" ".join([str(c).replace("\n", " ") for c in row if c]))
-
     for sumber in semua_sumber:
         for m in pola_uksw.finditer(sumber):
             no_urut = int(m.group(1))
@@ -360,12 +357,10 @@ def parse_matakuliah_pro(teks: str, tables: list) -> list[dict]:
             kode = m.group(3).strip()
             sks = m.group(4).strip()
             grade = m.group(5).strip()
-
             for k in KURIKULUM_2026_DATA:
                 if k["kode"] == kode:
                     nama_mk = k["nama"]
                     break
-
             key = (no_urut, kode)
             if key not in seen:
                 seen.add(key)
@@ -376,11 +371,9 @@ def parse_matakuliah_pro(teks: str, tables: list) -> list[dict]:
                     "sks": sks,
                     "nilai": grade
                 })
-
     if hasil:
         hasil.sort(key=lambda x: x.get("no", 999))
         return [{"kode": h["kode"], "nama_mk": h["nama_mk"], "sks": h["sks"], "nilai": h["nilai"]} for h in hasil]
-
     for kur in KURIKULUM_2026_DATA:
         if kur["kode"] in teks or kur["nama"].lower() in teks.lower():
             pos = teks.find(kur["kode"])
@@ -458,23 +451,13 @@ def buat_ringkasan_kurikulum(mk_list: list[dict], jurusan_pilih: str, peminatan_
     sisa_per_kategori = {kat: kategori_total[kat] - kategori_lulus.get(kat, 0) for kat in kategori_total}
     return {"detail": detail_status, "sisa": sisa_per_kategori}
 
-# --- FUNGSI MERANGKAI TEKS STATUS ACC (SINGLE ATAU GABUNGAN) ---
-def format_teks_acc(daftar_lulus: list[str], tanggal_acc: str) -> str:
-    if not daftar_lulus:
-        return ""
-    if len(daftar_lulus) == 1:
-        return f"Di ACC untuk {daftar_lulus[0]} ({tanggal_acc})"
-    elif len(daftar_lulus) == 2:
-        return f"Di ACC untuk {daftar_lulus[0]} dan {daftar_lulus[1]} ({tanggal_acc})"
-    else:
-        item_gabung = ", ".join(daftar_lulus[:-1]) + f", dan {daftar_lulus[-1]}"
-        return f"Di ACC untuk {item_gabung} ({tanggal_acc})"
+# --- FUNGSI MERANGKAI TEKS STATUS ACC SESUAI KEPERLUAN YANG DIPILIH ---
+def format_teks_acc(keperluan: str, tanggal_acc: str) -> str:
+    return f"Di ACC untuk {keperluan} ({tanggal_acc})"
 
 # --- TAMPILAN KARTU TANDA TANGAN KAPROGDI DI WEB ---
-def tampilkan_kartu_ttd_web(daftar_lulus: list[str], tanggal_acc: str = "24/08/2026"):
-    if not daftar_lulus:
-        return
-    teks_acc = format_teks_acc(daftar_lulus, tanggal_acc)
+def tampilkan_kartu_ttd_web(keperluan: str, tanggal_acc: str):
+    teks_acc = format_teks_acc(keperluan, tanggal_acc)
     html_code = f"""
     <div style="background-color: #ffffff; border: 1.5px solid #222222; padding: 20px 25px; border-radius: 8px; color: #000000; width: fit-content; margin-top: 15px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
         <p style="font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; margin: 0 0 8px 0; color: #000000; letter-spacing: 0.3px;">
@@ -503,7 +486,6 @@ def _gambar_stempel_ttd_pil(teks_acc: str) -> Image.Image:
     h_kartu = 300
     canvas = Image.new("RGBA", (w_kartu, h_kartu), (255, 255, 255, 0))
     draw = ImageDraw.Draw(canvas)
-
     try:
         font_bold_hdr = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
         font_bold_nama = ImageFont.truetype("DejaVuSans-Bold.ttf", 21)
@@ -513,7 +495,7 @@ def _gambar_stempel_ttd_pil(teks_acc: str) -> Image.Image:
         font_bold_nama = ImageFont.load_default()
         font_reg_jab = ImageFont.load_default()
 
-    # Teks Status ACC (contoh: "Di ACC untuk KP dan Review Proposal (24/08/2026)")
+    # Teks Status ACC (contoh: "Di ACC untuk KP (12/11/2026)")
     draw.text((10, 10), teks_acc, fill=(0, 0, 0, 255), font=font_bold_hdr)
 
     # Goresan tanda tangan Kaprogdi (Presisi tinggi)
@@ -536,22 +518,20 @@ def _gambar_stempel_ttd_pil(teks_acc: str) -> Image.Image:
 
     # Jabatan
     draw.text((10, y_nama + 34), "Ketua Program Studi S1 Teknik Informatika", fill=(15, 15, 15, 255), font=font_reg_jab)
-
     return canvas
 
-def tempel_ttd_ke_pdf_asli(pdf_asli_bytes: bytes, daftar_lulus: list[str], tanggal_acc: str) -> bytes:
+def tempel_ttd_ke_pdf_asli(pdf_asli_bytes: bytes, keperluan_acc: str, tanggal_acc: str) -> bytes:
     """
     Menempelkan gambar stempel TTD Kaprogdi langsung ke area kosong paling bawah
-    di halaman terakhir PDF asli yang diunggah pengguna.
+    di halaman terakhir PDF asli sesuai keperluan yang dipilih dan lulus.
     """
-    if not daftar_lulus:
+    if not keperluan_acc:
         return pdf_asli_bytes
 
     from pypdf import PdfReader, PdfWriter
 
     reader = PdfReader(io.BytesIO(pdf_asli_bytes))
     writer = PdfWriter()
-
     for page in reader.pages:
         writer.add_page(page)
 
@@ -559,15 +539,13 @@ def tempel_ttd_ke_pdf_asli(pdf_asli_bytes: bytes, daftar_lulus: list[str], tangg
     page_w = float(last_page.mediabox.width)
     page_h = float(last_page.mediabox.height)
 
-    teks_acc = format_teks_acc(daftar_lulus, tanggal_acc)
+    teks_acc = format_teks_acc(keperluan_acc, tanggal_acc)
     stempel_img = _gambar_stempel_ttd_pil(teks_acc)
 
-    # Ukuran stempel disesuaikan proporsional di area kosong bawah PDF
     target_w = min(page_w - 72.0, 310.0)
     scale = target_w / stempel_img.width
     target_h = stempel_img.height * scale
 
-    # Posisi di sudut kiri-bawah (di bawah tulisan Salatiga, dd-mm-yyyy)
     pos_x = 36.0
     pos_y = 25.0
 
@@ -585,7 +563,6 @@ def tempel_ttd_ke_pdf_asli(pdf_asli_bytes: bytes, daftar_lulus: list[str], tangg
 
     overlay_reader = PdfReader(io.BytesIO(overlay_buf.getvalue()))
     overlay_page = overlay_reader.pages[0]
-
     last_page.merge_page(overlay_page, over=False)
 
     out_buf = io.BytesIO()
@@ -626,7 +603,7 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
             mk_d_atau_e.append(f"{nama} ({kode}) [Nilai: {nilai}]")
 
     pesan_rekomendasi = []
-    daftar_acc_lulus = []
+    status_per_keperluan = {}
 
     # 1. EVALUASI SYARAT KERJA PRAKTEK (KP)
     syarat_kelompok = [
@@ -654,9 +631,9 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
     syarat_kp_sks = total_sks_lulus >= 108
     syarat_kp_mk = len(mk_kp_belum_c) == 0
     syarat_kp = syarat_kp_sks and syarat_kp_mk
+    status_per_keperluan["KP"] = syarat_kp
 
     if syarat_kp:
-        daftar_acc_lulus.append("KP")
         pesan_rekomendasi.append({"status": True, "jenis": "KP", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **Kerja Praktek (KP)**."})
     else:
         alasan_kp = []
@@ -670,28 +647,30 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
             "teks": "❌ **Belum memenuhi syarat KP (Min. 108 SKS & MK Wajib min C).**\n   *Alasan:*\n   * " + "\n   * ".join(alasan_kp)
         })
 
-    # 2. EVALUASI SYARAT TUGAS TALENTA UNGGUL 1 (TTU 1)
-    syarat_ttu1 = (total_sks_lulus >= 120)
-    if syarat_ttu1:
-        daftar_acc_lulus.append("TTU 1")
-        pesan_rekomendasi.append({"status": True, "jenis": "TTU 1", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **TTU 1** (Min. 120 SKS)."})
+    # 2. EVALUASI SYARAT TUGAS TALENTA UNGGUL (TTU)
+    syarat_ttu = (total_sks_lulus >= 120)
+    status_per_keperluan["TTU"] = syarat_ttu
+
+    if syarat_ttu:
+        pesan_rekomendasi.append({"status": True, "jenis": "TTU", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **TTU** (Min. 120 SKS)."})
     else:
-        kekurangan_sks_ttu1 = 120 - total_sks_lulus
+        kekurangan_sks_ttu = 120 - total_sks_lulus
         pesan_rekomendasi.append({
             "status": False,
-            "jenis": "TTU 1",
-            "teks": f"❌ **Belum memenuhi syarat TTU 1 (< 120 SKS).**\n   *Alasan:* SKS Anda saat ini baru **{total_sks_lulus} SKS**, sehingga masih kurang **{kekurangan_sks_ttu1} SKS** dari batas minimal 120 SKS."
+            "jenis": "TTU",
+            "teks": f"❌ **Belum memenuhi syarat TTU (< 120 SKS).**\n   *Alasan:* SKS Anda saat ini baru **{total_sks_lulus} SKS**, sehingga masih kurang **{kekurangan_sks_ttu} SKS** dari batas minimal 120 SKS."
         })
 
     # 3. EVALUASI SYARAT REVIEW PROPOSAL
     syarat_review = (len(mk_d_atau_e) == 0) and (len(mk_list) > 0)
+    status_per_keperluan["Review"] = syarat_review
+
     if syarat_review:
-        daftar_acc_lulus.append("Review Proposal")
-        pesan_rekomendasi.append({"status": True, "jenis": "Review Proposal", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **Review Proposal** (Tidak ada nilai D/E)."})
+        pesan_rekomendasi.append({"status": True, "jenis": "Review", "teks": "✅ Anda memenuhi syarat dan bisa mendaftar **Review Proposal** (Tidak ada nilai D/E)."})
     else:
         pesan_rekomendasi.append({
             "status": False,
-            "jenis": "Review Proposal",
+            "jenis": "Review",
             "teks": "❌ **Belum memenuhi syarat Review (Masih ada nilai D/E).**\n   *Alasan:* Terdapat **" + str(len(mk_d_atau_e)) + " mata kuliah** yang bernilai D/E yang harus diperbaiki terlebih dahulu:\n      - " + "\n      - ".join(mk_d_atau_e)
         })
 
@@ -702,9 +681,9 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
     syarat_yudisium_d = (jumlah_d <= 3) and (sks_d <= 8)
     syarat_yudisium_e = not ada_e
     syarat_yudisium = syarat_yudisium_sks and syarat_yudisium_d and syarat_yudisium_e
+    status_per_keperluan["Yudisium"] = syarat_yudisium
 
     if syarat_yudisium:
-        daftar_acc_lulus.append("Yudisium")
         pesan_rekomendasi.append({"status": True, "jenis": "Yudisium", "teks": "🎉 Selamat! Anda memenuhi syarat untuk mendaftar **Yudisium**."})
     else:
         alasan_yudisium = []
@@ -722,11 +701,7 @@ def evaluasi_syarat_akademik(mk_list: list[dict]) -> dict:
 
     return {
         "total_sks_lulus": total_sks_lulus,
-        "syarat_kp": syarat_kp,
-        "syarat_ttu1": syarat_ttu1,
-        "syarat_review": syarat_review,
-        "syarat_yudisium": syarat_yudisium,
-        "daftar_acc_lulus": daftar_acc_lulus,
+        "status_per_keperluan": status_per_keperluan,
         "pesan": pesan_rekomendasi
     }
 
@@ -743,10 +718,10 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📌 Petunjuk Penggunaan")
     st.markdown("""
-    1. Unggah transkrip nilai (**PDF**, **PNG**, **JPG**, **JPEG**).
-    2. Sistem membaca dokumen **secara otomatis**.
-    3. Pilih Jurusan dan Peminatan Anda.
-    4. Unduh hasil PDF transkrip yang sudah dibubuhi tanda tangan ACC Kaprogdi.
+    1. Pilih **Keperluan Pengajuan** (**KP**, **Review**, **TTU**, atau **Yudisium**).
+    2. Unggah transkrip nilai (**PDF**, **PNG**, **JPG**, **JPEG**).
+    3. Sistem membaca dokumen dan mengecek syarat sesuai keperluan yang dipilih.
+    4. Jika lulus syarat, unduh hasil PDF yang sudah dibubuhi tanda tangan ACC Kaprogdi.
     """)
     st.markdown("---")
     st.caption("Dibuat dengan ❤️ menggunakan Streamlit")
@@ -777,9 +752,16 @@ if current_view == "HOME":
     st.title("Transkrip Nilai Reader & Analisis Kurikulum")
     st.markdown("Ekstrak data mahasiswa dan pantau sisa mata kuliah berdasarkan Jurusan & Peminatan secara otomatis.")
     st.markdown("---")
-   
+
+    # --- 1. PILIHAN KEPERLUAN SEBELUM UPLOAD FILE ---
+    keperluan_pilih = st.selectbox(
+        "📋 Pilih Keperluan Pengajuan ACC Transkrip",
+        ["KP", "Review", "TTU", "Yudisium"],
+        help="Pilih satu keperluan yang ingin di-ACC. Tanda tangan akan diberikan pada PDF apabila Anda memenuhi syarat untuk keperluan ini."
+    )
+
     uploaded_file = st.file_uploader(
-        "📂 Unggah File Transkrip Nilai (PDF / Gambar)",
+        f"📂 Unggah File Transkrip Nilai untuk Keperluan **{keperluan_pilih}** (PDF / Gambar)",
         type=["pdf", "png", "jpg", "jpeg"],
     )
    
@@ -801,6 +783,7 @@ if current_view == "HOME":
                 st.image(Image.open(io.BytesIO(file_bytes)), caption=f"File: {uploaded_file.name}", use_container_width=True)
             else:
                 st.success(f"📄 File PDF berhasil diunggah: **{uploaded_file.name}**")
+                st.info(f"🎯 Keperluan dipilih: **{keperluan_pilih}**")
                
         with col_result:
             st.markdown("### ⚙️ Hasil Analisis Otomatis")
@@ -812,7 +795,6 @@ if current_view == "HOME":
                
                 with st.expander("🔍 Lihat Teks Mentah yang Terbaca (Debug OCR)"):
                     st.text(hasil.get("raw_teks", "Tidak ada teks."))
-
                 if not hasil["mata_kuliah"]:
                     st.warning("⚠️ Tidak ada mata kuliah yang terdeteksi otomatis. Silakan lengkapi baris secara manual pada tabel di bawah.")
                 else:
@@ -861,9 +843,9 @@ if current_view == "HOME":
                     for item in ringkasan["detail"]:
                         st.markdown(f"- {item}")
                
-                # --- HASIL EVALUASI DENGAN TANDA TANGAN ACC KAPROGDI ---
+                # --- HASIL EVALUASI & TANDA TANGAN ACC SESUAI PILIHAN KEPERLUAN ---
                 st.markdown("---")
-                st.markdown("### 🔍 Status Kelayakan Pendaftaran & Lembar ACC Kaprogdi")
+                st.markdown(f"### 🔍 Status Kelayakan & Lembar ACC ({keperluan_pilih})")
                 eval_hasil = evaluasi_syarat_akademik(current_mk_list)
                 st.metric(label="Total SKS Diperoleh / Lulus", value=f"{eval_hasil['total_sks_lulus']} SKS")
                
@@ -874,11 +856,13 @@ if current_view == "HOME":
                         st.warning(item["teks"])
 
                 tanggal_hari_ini = datetime.now().strftime("%d/%m/%Y")
-                daftar_lulus = eval_hasil["daftar_acc_lulus"]
+                lulus_keperluan_dipilih = eval_hasil["status_per_keperluan"].get(keperluan_pilih, False)
 
-                if daftar_lulus:
-                    st.markdown("#### ✍️ Lembar Tanda Tangan ACC Kaprogdi")
-                    tampilkan_kartu_ttd_web(daftar_lulus=daftar_lulus, tanggal_acc=tanggal_hari_ini)
+                if lulus_keperluan_dipilih:
+                    st.markdown(f"#### ✍️ Lembar Tanda Tangan ACC Kaprogdi — {keperluan_pilih}")
+                    tampilkan_kartu_ttd_web(keperluan=keperluan_pilih, tanggal_acc=tanggal_hari_ini)
+                else:
+                    st.error(f"⛔ Pengajuan untuk **{keperluan_pilih}** belum memenuhi syarat, sehingga tanda tangan ACC tidak diterbitkan.")
 
                 st.markdown("---")
                 profil_aktual = {"nama": nama_v, "nim": nim_v, "jurusan": jur_v, "universitas": uni_v, "ipk": ipk_v}
@@ -889,23 +873,30 @@ if current_view == "HOME":
                             st.success("💾 Data berhasil disimpan ke database lokal!")
                 with col_pdf:
                     if ext == "pdf":
-                        try:
-                            pdf_bertanda_tangan = tempel_ttd_ke_pdf_asli(
-                                pdf_asli_bytes=file_bytes,
-                                daftar_lulus=daftar_lulus,
-                                tanggal_acc=tanggal_hari_ini,
+                        if lulus_keperluan_dipilih:
+                            try:
+                                pdf_bertanda_tangan = tempel_ttd_ke_pdf_asli(
+                                    pdf_asli_bytes=file_bytes,
+                                    keperluan_acc=keperluan_pilih,
+                                    tanggal_acc=tanggal_hari_ini,
+                                )
+                                nama_file_unduh = f"Transkrip_ACC_{keperluan_pilih}_{nim_v}.pdf"
+                                st.download_button(
+                                    f"📄 Unduh file PDF (ACC {keperluan_pilih})",
+                                    data=pdf_bertanda_tangan,
+                                    file_name=nama_file_unduh,
+                                    mime="application/pdf",
+                                )
+                            except ImportError:
+                                st.info("Install `pypdf` (`pip install pypdf`) untuk mengaktifkan fitur penempelan TTD pada PDF.")
+                            except Exception as e:
+                                st.error(f"Gagal menempelkan tanda tangan ke PDF: {e}")
+                        else:
+                            st.button(
+                                f"🔒 Unduh PDF Terkunci (Syarat {keperluan_pilih} Belum Lulus)",
+                                disabled=True,
+                                key="btn_pdf_locked"
                             )
-                            nama_file_unduh = f"Transkrip_ACC_{nim_v}.pdf"
-                            st.download_button(
-                                "📄 Unduh file",
-                                data=pdf_bertanda_tangan,
-                                file_name=nama_file_unduh,
-                                mime="application/pdf",
-                            )
-                        except ImportError:
-                            st.info("Install `pypdf` (`pip install pypdf`) untuk mengaktifkan fitur penempelan TTD pada PDF.")
-                        except Exception as e:
-                            st.error(f"Gagal menempelkan tanda tangan ke PDF: {e}")
                     else:
                         st.warning("⚠️ Unggah file dalam format **PDF** untuk mengunduh PDF bertanda tangan ACC.")
 
